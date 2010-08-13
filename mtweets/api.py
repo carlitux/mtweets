@@ -277,7 +277,7 @@ class API(OAuthClient):
         
         
     def get_home_timeline(self, version=None, **kwargs):
-        """get_home_timeline(**kwargs)
+        """get_home_timeline()
 
         Returns the 20 most recent statuses, including retweets if they exist,
         posted by the authenticating user and the user's they follow. This is
@@ -331,7 +331,7 @@ class API(OAuthClient):
       
         
     def get_friends_timeline(self, version=None, **kwargs):
-        """get_friends_timeline(**kwargs)
+        """get_friends_timeline()
 
         Returns the 20 most recent statuses posted by the authenticating user
         and the user's they follow. This is the same timeline seen by a user
@@ -397,7 +397,7 @@ class API(OAuthClient):
         
     
     def get_user_timeline(self, id=None, version=None, **kwargs): 
-        """get_user_timeline(id=None, **kwargs)
+        """get_user_timeline(id=None)
 
         Returns the 20 most recent statuses posted by the authenticating user.
         It is also possible to request another user's timeline by using the
@@ -485,7 +485,7 @@ class API(OAuthClient):
         
     
     def get_mentions(self, version=None, **kwargs):
-        """get_mentions(**kwargs)
+        """get_mentions()
 
         Returns the 20 most recent mentions (status containing @username) for
         the authenticating user.
@@ -553,7 +553,7 @@ class API(OAuthClient):
         
     
     def get_retweeted_of_me(self, version=None, **kwargs):
-        """get_retweeted_of_me(**kwargs)
+        """get_retweeted_of_me()
 
         Returns the 20 most recent tweets of the authenticated user that have
         been retweeted by others.
@@ -604,7 +604,7 @@ class API(OAuthClient):
         
 
     def get_retweeted_by_me(self, version=None, **kwargs):
-        """get_retweeted_by_me(**kwargs)
+        """get_retweeted_by_me()
 
         Returns the 20 most recent retweets posted by the authenticating user.
 
@@ -654,7 +654,7 @@ class API(OAuthClient):
         
 
     def get_retweeted_to_me(self, version=None, **kwargs):
-        """get_retweeted_to_me(**kwargs)
+        """get_retweeted_to_me()
 
         Returns the 20 most recent retweets posted by users the authenticating
         user follow.
@@ -703,134 +703,299 @@ class API(OAuthClient):
             raise AuthError("get_retweeted_to_me() requires authorization.")
         
         
-    ###########################################################################################################
+    ############################################################################
     ## Status methods
-    ###########################################################################################################
+    ############################################################################
     
-    def status_show(self, id, version=None):
-        """retweeted_to_me(**kwargs)
+    def status_show(self, id, version=None, **kwargs):
+        """status_show()
 
-        Returns a single status, specified by the id parameter below.  The status's author will be returned inline.
+        Returns a single status, specified by the id parameter below. The 
+        status's author will be returned inline.
 
         Parameters:
-            id -  Required.  The numerical ID of the status to retrieve.  
-            version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+            id - The numerical ID of the desired status.
+            
+            trim_user - When set to either true, t or 1, each tweet returned in
+                        a timeline will include a user object including only the
+                        status authors numerical ID. Omit this parameter to 
+                        receive the complete user object.
+                        
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
         
         try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/show/%d.format"%(version, id)))
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/show/%d.json"%(version, id), kwargs))
         except HTTPError, e:
-            raise RequestError("retweeted_to_me(): %s"%e.msg, e.code)
+            raise RequestError("status_show(): %s"%e.msg, e.code)
         
     
-    def status_update(self, status, in_reply_to_status_id=None, latitude=None, longitude=None, version=None):
-        """status_update(status, in_reply_to_status_id = None)
+    def status_update(self, status, version=None, **kwargs):
+        """status_update(status)
 
-        Updates the authenticating user's status.  Requires the status parameter specified below.
-        A status update with text identical to the authenticating users current status will be ignored to prevent duplicates.
+        Updates the authenticating user's status. A status update with text
+        identical to the authenticating user's text identical to the
+        authenticating user's current status will be ignored to prevent duplicates.
+
 
         Parameters:
-            status - Required. The text of your status update. URL encode as necessary. Statuses over 140 characters will be forceably truncated.
-            in_reply_to_status_id - Optional. The ID of an existing status that the update is in reply to.
-            latitude (string) - Optional. The location's latitude that this tweet refers to.
-            longitude (string) - Optional. The location's longitude that this tweet refers to.
-            version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+            status - The text of your status update, up to 140 characters.
+                     URL encode as necessary. 
+                     
+            in_reply_to_status_id - The ID of an existing status that the update
+                                    is in reply to.
+            lat - The latitude of the location this tweet refers to. This
+                  parameter will be ignored unless it is inside the range
+                  -90.0 to +90.0 (North is positive) inclusive. It will also be
+                  ignored if there isn't a corresponding long parameter.
+            
+            long - The longitude of the location this tweet refers to. The valid
+                   ranges for longitude is -180.0 to +180.0 (East is positive)
+                   inclusive. This parameter will be ignored if outside that
+                   range, if it is not a number, if geo_enabled is disabled,
+                   or if there not a corresponding lat parameter.
 
-            ** Note: in_reply_to_status_id will be ignored unless the author of the tweet this parameter references
-            is mentioned within the status text. Therefore, you must include @username, where username is 
-            the author of the referenced tweet, within the update.
+            place_id - A place in the world. These IDs can be retrieved from
+                       geo/reverse_geocode.
 
-            ** Note: valid ranges for latitude/longitude are, for example, -180.0 to +180.0 (East is positive) inclusive.  
-            This parameter will be ignored if outside that range, not a number, if geo_enabled is disabled, or if there not a corresponding latitude parameter with this tweet.
+            display_coordinates - Whether or not to put a pin on the exact
+                                  coordinates a tweet has been sent from.
+
+            trim_user - When set to either true, t or 1, each tweet returned in
+                        a timeline will include a user object including only the
+                        status authors numerical ID. Omit this parameter to
+                        receive the complete user object.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        params = {'status':status}
-        
-        if latitude is not None and longitude is not None:
-            params['lat'] = latitude
-            params['long'] = longitude
-        if in_reply_to_status_id is not None:
-            params['in_reply_to_status_id'] = in_reply_to_status_id
+        kwargs['status'] = status
         
         if self.is_authorized():
             try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/update.json"%version, params, 'POST'))
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/update.json"%version, kwargs, 'POST'))
             except HTTPError, e:
                 raise RequestError("status_update(): %s"%e.msg, e.code)
         else:
             raise AuthError("status_update() requires authorization.")
         
 
-    def status_destroy(self, id, version=None):
+    def status_destroy(self, id, version=None, **kwargs):
         """status_destroy(id)
 
-        Destroys the status specified by the required ID parameter. 
-        The authenticating user must be the author of the specified status.
+        Destroys the status specified by the required ID parameter.
+        Usage note: The authenticating user must be the author of the specified status.
 
         Parameters:
-            id - Required. The ID of the status to destroy.
-            version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+            id - The numerical ID of the desired status.
+            
+            trim_user - When set to either true, t or 1, each tweet returned in
+                        a timeline will include a user object including only the
+                        status authors numerical ID. Omit this parameter to
+                        receive the complete user object.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
         
         if self.is_authorized():
             try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/destroy/%s.json"%(version, id), http_method='POST'))
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/destroy/%s.json"%(version, id), kwargs, 'POST'))
             except HTTPError, e:
                 raise RequestError("status_destroy(): %s"%e.msg, e.code)
         else:
             raise AuthError("status_destroy() requires authorization.")        
         
     
-    def status_retweet(self, id, version=None):
+    def status_retweet(self, id, version=None, **kwargs):
         """status_retweet(id)
 
-        Retweets a tweet. Requires the id parameter of the tweet you are retweeting.
-
+        Retweets a tweet. Returns the original tweet with retweet details embedded.
+        
         Parameters:
-            id - Required. The numerical ID of the tweet you are retweeting.
-            version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+            id - The numerical ID of the desired status. 
+            
+            trim_user - When set to either true, t or 1, each tweet returned in
+                        a timeline will include a user object including only the
+                        status authors numerical ID. Omit this parameter to
+                        receive the complete user object.
+          
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in
+                               a discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities.
+          
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
         
         if self.is_authorized():
             try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweet/%s.json"%(version, id), http_method='POST'))
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweet/%s.json"%(version, id), kwargs, 'POST'))
             except HTTPError, e:
                 raise RequestError("status_retweet(): %s"%e.msg, e.code)
         else:
             raise AuthError("status_retweet() requires authorization.")
         
     
-    def get_retweets(self, id, count=None, version=None):
-        """get_retweets(id, count):
+    def get_retweets(self, id, version=None, **kwargs):
+        """get_retweets(id):
     
         Returns up to 100 of the first retweets of a given tweet.
 
         Parameters:
-            id - Required.  The numerical ID of the tweet you want the retweets of.
-            count - Optional.  Specifies the number of retweets to retrieve. May not be greater than 100.
-            version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+            id - The numerical ID of the desired status. 
+            
+            count - Specifies the number of records to retrieve. Must be less
+                    than or equal to 100.
+
+            trim_user - When set to either true, t or 1, each tweet returned in
+                        a timeline will include a user object including only the
+                        status authors numerical ID. Omit this parameter to
+                        receive the complete user object.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        params = {}
         if self.is_authorized():
-            if count is not None:
-                params['count'] = count
             try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweet/%s.json"%(version, id), params))
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweets/%s.json"%(version, id), kwargs))
             except HTTPError, e:
-                raise RequestError("status_retweet(): %s"%e.msg, e.code)
+                raise RequestError("get_retweets(): %s"%e.msg, e.code)
         else:
-            raise AuthError("status_retweet() requires authorization.")
+            raise AuthError("get_retweets() requires authorization.")
 
         
-    def get_retweeted_by(self):
-        raise NotImplementedError
+    def get_retweeted_by(self, id, version=None, **kwargs):
+        """get_retweeted_by(id):
     
-    def get_retweeted_by_ids(self):
-        raise NotImplementedError
+        Show user objects of up to 100 members who retweeted the status.
+
+        Parameters:
+            id - The numerical ID of the desired status. 
+            
+            count - Specifies the number of records to retrieve. Must be less
+                    than or equal to 100.
+
+            page - Specifies the page of results to retrieve.
+
+            trim_user - When set to either true, t or 1, each tweet returned in
+                        a timeline will include a user object including only the
+                        status authors numerical ID. Omit this parameter to
+                        receive the complete user object.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/%s/retweeted_by.json"%(version, id), kwargs))
+            except HTTPError, e:
+                raise RequestError("get_retweeted_by(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("get_retweeted_by() requires authorization.")
+    
+    def get_retweeted_by_ids(self, id, version=None, **kwargs):
+        """get_retweeted_by_ids(id):
+    
+        Show user ids of up to 100 users who retweeted the status.
+
+        Parameters:
+            id - The numerical ID of the desired status. 
+            
+            count - Specifies the number of records to retrieve. Must be less
+                    than or equal to 100.
+
+            page - Specifies the page of results to retrieve.
+
+            trim_user - When set to either true, t or 1, each tweet returned in
+                        a timeline will include a user object including only the
+                        status authors numerical ID. Omit this parameter to
+                        receive the complete user object.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/%s/retweeted_by/ids.json"%(version, id), kwargs))
+            except HTTPError, e:
+                raise RequestError("get_retweeted_by_ids(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("get_retweeted_by_ids() requires authorization.")
         
     
     ###########################################################################################################

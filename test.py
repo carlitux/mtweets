@@ -55,7 +55,11 @@ def main():
     #print api.get_mentions(count=2)    
     #print api.get_retweeted_by_me(count=2)
     #print api.get_retweeted_of_me(count=2)
-    print api.get_retweeted_to_me(count=2)
+    #print api.get_retweeted_to_me(count=2)
+    #print api.status_show(21017907772)
+    #print api.status_update("testing status update with mtweets")    
+    #print api.status_destroy(21037924303)    
+    print api.status_retweet(21037278048)    
     
     
 main()
