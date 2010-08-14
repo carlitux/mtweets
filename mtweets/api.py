@@ -1002,17 +1002,34 @@ class API(OAuthClient):
     ## User methods
     ###########################################################################################################
         
-    def user_show(self, id=None, user_id=None, screen_name=None, version=None):
-        """user_show(id=None, user_id=None, screen_name=None)
+    def user_show(self, user_id=None, screen_name=None, version=None, **kwargs):
+        """user_show(user_id=None, screen_name=None)
 
-        Returns extended information of a given user.  The author's most recent status will be returned inline.
+        Returns extended information of a given user, specified by ID or screen
+        name as per the required id parameter. The author's most recent status
+        will be returned inline.
 
         Parameters:
-            ** Note: One of the following must always be specified.
-            id - The ID or screen name of a user.
-            user_id - Specfies the ID of the user to return. Helpful for disambiguating when a valid user ID is also a valid screen name.
-            screen_name - Specfies the screen name of the user to return. Helpful for disambiguating when a valid screen name is also a user ID.
-            version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID. 
+                          
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on 
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
 
         Usage Notes:
         Requests for protected users without credentials from 
@@ -1021,51 +1038,281 @@ class API(OAuthClient):
 
         ...will result in only publicly available data being returned.
         """
+        if user_id is None and screen_name is None:
+            raise RequestError('user_show(): Need one of the following parameter: user_id or screen_name')
+        
         version = version or self.apiVersion
-        apiURL = ""
-        params = {}
-        if id is not None:
-            apiURL = "http://api.twitter.com/%d/users/show/%s.json"%(version, id)
-        else:
-            apiURL = "http://api.twitter.com/%d/users/show.json"%(version)
-            if user_id is not None:
-                params['user_id'] = user_id
-            if screen_name is not None:
-                params['screen_name'] = screen_name
-        
-        if apiURL != "":
-            try:
-                return simplejson.load(self.fetch_resource(apiURL, params))
-            except HTTPError, e:
-                raise RequestError("user_show(): %s"%e.msg, e.code)
-        else:
-            raise RequestError("user_show() requires at least one parameter.")
-        
+        if user_id is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
+                    
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/show.json"%(version), kwargs))
+        except HTTPError, e:
+            raise RequestError("user_show(): %s"%e.msg, e.code)
     
-    def user_lookup(self, ids=None, screen_names=None, version = None):
-        """user_lookup(ids=None, screen_names=None, version=None)
+    
+    def user_lookup(self, ids=None, screen_names=None, version=None, **kwargs):
+        """user_lookup(ids=None, screen_names=None)
+        
+        Return up to 100 users worth of extended information, specified by
+        either ID, screen name, or combination of the two. The author's most
+        recent status (if the authenticating user has permission) will be
+        returned inline.
         
         Parameters:
-            ids, screen_names Should be iterable object.
+            user_id - A comma separated list of user IDs, up to 100 are allowed 
+                      in a single request. Should be iterable object.
 
-        Return up to 100 users worth of extended information, specified by either ID, screen name, or combination of the two.
-        The author's most recent status (if the authenticating user has permission) will be returned inline.
-        Statuses for the users in question will be returned inline if they exist. Requires authentication!
+            screen_name - A comma separated list of screen names, up to 100 are
+                          allowed in a single request. Should be iterable object.
+            
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities.
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+
+        Statuses for the users in question will be returned inline if they exist.
+        Requires authentication!
         """
         version = version or self.apiVersion
         if self.is_authorized():
-            params = {}
             if ids is not None:
-                params['user_id'] = ','.join(ids)
+                kwargs['user_id'] = ','.join(ids)
             if screen_names is not None:
-                params['screen_name'] = ','.join(screen_names)
+                kwargs['screen_name'] = ','.join(screen_names)
             try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/lookup.json"%version, params))
+                # do a POST request this beacuse the parameters can overflow the maximum GET length
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/lookup.json"%version, kwargs, 'POST'))
             except HTTPError, e:
                 raise RequestError("user_lookup(): %s"%e.msg, e.code)
         else:
             raise AuthError("user_lookup() requires authorization.")
+        
+    def user_search(self, query, version=None, **kwargs):
+        """user_search(query)
+        
+        Runs a search for users similar to Find People button on Twitter.com.
+        The results returned by people search on Twitter.com are the same as
+        those returned by this API request.
+
+        Only the first 1000 matches are available.
+        
+        Parameters:
+            query - The search query to run against people search. 
+
+            per_page - The number of people to retrieve. Maxiumum of 20 allowed
+                       per page.
+
+            page - Specifies the page of results to retrieve.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities.
+                    
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            kwargs['q'] = query
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/search.json"%version, kwargs))
+            except HTTPError, e:
+                raise RequestError("user_search(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("user_search() requires authorization.")
+        
+    def user_suggestions(self, version=None):
+        """user_suggestions()
+        
+        Access to Twitter's suggested user list. This returns the list of
+        suggested user categories. The category can be used in the
+        users/suggestions/category endpoint to get the users in that category.
+        
+        Parameters:
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/suggestions.json"%version))
+        except HTTPError, e:
+            raise RequestError("user_suggestions(): %s"%e.msg, e.code)
+        
+    def user_suggestions_slug(self, slug, version=None):
+        """user_suggestions_slug(slug)
+        
+        Access the users in a given category of the Twitter suggested user list.
+        It is recommended that end clients cache this data for no more than one
+        hour.
+        
+        Parameters:
+            slug - The short name of list or a category 
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/suggestions/%s.json"%(version, slug)))
+        except HTTPError, e:
+            raise RequestError("user_suggestions_slug(): %s"%e.msg, e.code)
+        
+    def user_profile_image(self, screen_name, version=None, **kwargs):
+        """user_profile_image(screen_name)
+        
+        Access the profile image in various sizes for the user with the
+        indicated screen_name. If no size is provided the normal image is
+        returned. This resource does not return JSON or XML, but instead returns
+        a 302 redirect to the actual image resource.
+        
+        This method should only be used by application developers to lookup or
+        check the profile image URL for a user. This method must not be used as
+        the image source URL presented to users of your application.
+
+        Parameters:
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID.
+                          
+            size - Specifies the size of image to fetch. Not specifying a size
+                   will give the default, normal size of 48px by 48px. Valid
+                   options include:
+
+                       * bigger - 73px by 73px
+                       * normal - 48px by 48px
+                       * mini - 24px by 24px
+                       
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/profile_image/%s.json"%(version, screen_name), kwargs))
+        except HTTPError, e:
+            raise RequestError("user_profile_image(): %s"%e.msg, e.code)
+        
+    def user_statuses_friends(self, version=None, **kwargs):
+        """user_statuses_friends()
+        
+        Returns a user's friends, each with current status inline. They are
+        ordered by the order in which the user followed them, most recently
+        followed first, 100 at a time. (Please note that the result set isn't
+        guaranteed to be 100 every time as suspended users will be filtered out.)
+
+        Use the cursor option to access older friends.
+
+        With no user specified, request defaults to the authenticated user's
+        friends. It is also possible to request another user's friends list via
+        the id, screen_name or user_id parameter.
+
+
+        Parameters:
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID.
+
+            cursor - Breaks the results into pages. This is recommended for
+                     users who are following many users. Provide a value of
+                     -1 to begin paging. Provide values as returned in the
+                     response body's next_cursor and previous_cursor attributes
+                     to page back and forth in the list.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+                               
+        Note.- unless requesting it from a protected user; if getting this
+               data of a protected user, you must auth (and be allowed to see
+               that user).
+        """
+        version = version or self.apiVersion
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/friends.json"%(version), kwargs))
+        except HTTPError, e:
+            raise RequestError("user_statuses_friends(): %s"%e.msg, e.code)
+        
     
+    def user_statuses_followers(self, version=None, **kwargs):
+        """user_statuses_followers()
+               
+        Returns the authenticating user's followers, each with current status
+        inline. They are ordered by the order in which they followed the user,
+        100 at a time. (Please note that the result set isn't guaranteed to be
+        100 every time as suspended users will be filtered out.)
+
+        Use the cursor parameter to access earlier followers.
+
+        Parameters:
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+          
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID.
+          
+            cursor - Breaks the results into pages. This is recommended for
+                     users who are following many users. Provide a value of -1
+                     to begin paging. Provide values as returned in the response
+                     body's next_cursor and previous_cursor attributes to page
+                     back and forth in the list.
+          
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities.
+                            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+                               
+        Note.- unless requesting it from a protected user; if getting this
+               data of a protected user, you must auth (and be allowed to see
+               that user).
+        """
+        version = version or self.apiVersion
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/followers.json"%(version), kwargs))
+        except HTTPError, e:
+            raise RequestError("user_statuses_followers(): %s"%e.msg, e.code)
+        
     ###########################################################################################################
     ## List methods
     ###########################################################################################################
