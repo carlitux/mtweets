@@ -908,14 +908,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweets/%s.json"%(version, id), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_retweets(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_retweets() requires authorization.")
-
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweets/%s.json"%(version, id), kwargs))
+        except HTTPError, e:
+            raise RequestError("get_retweets(): %s"%e.msg, e.code)
+        
         
     def get_retweeted_by(self, id, version=None, **kwargs):
         """get_retweeted_by(id):
@@ -998,9 +995,9 @@ class API(OAuthClient):
             raise AuthError("get_retweeted_by_ids() requires authorization.")
         
     
-    ###########################################################################################################
+    ############################################################################
     ## User methods
-    ###########################################################################################################
+    ############################################################################
         
     def user_show(self, user_id=None, screen_name=None, version=None, **kwargs):
         """user_show(user_id=None, screen_name=None)
@@ -1313,29 +1310,202 @@ class API(OAuthClient):
         except HTTPError, e:
             raise RequestError("user_statuses_followers(): %s"%e.msg, e.code)
         
-    ###########################################################################################################
+    ############################################################################
+    ## Trends methods
+    ############################################################################
+    
+    def get_trends(self, version=None):
+        """user_statuses_followers()
+               
+        Returns the top ten topics that are currently trending on Twitter. The
+        response includes the time of the request, the name of each trend, and
+        the url to the Twitter Search results page for that topic.
+
+        Parameters:
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            return simplejson.load(self.opener.open("http://api.twitter.com/%d/trends.json"%(version)))
+        except HTTPError, e:
+            raise RequestError("get_trends(): %s"%e.msg, e.code)
+        
+    def trends_current(self, version=None, **kwargs):
+        """trends_current()
+        
+        Returns the current top 10 trending topics on Twitter. The response
+        includes the time of the request, the name of each trending topic, and
+        query used on Twitter Search results page for that topic.
+
+        Parameters:
+            exclude - Setting this equal to hashtags will remove all hashtags 
+                      from the trends list. 
+                            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            if len(kwargs) > 0:
+                url = "http://api.twitter.com/%d/trends/current.json?%s"%(version, urllib.urlencode(kwargs))
+            else:
+                url = "http://api.twitter.com/%d/trends/current.json"%version                
+            return simplejson.load(self.opener.open(url))
+        except HTTPError, e:
+            raise RequestError("trends_current(): %s"%e.msg, e.code)
+        
+        
+    def trends_dialy(self, version=None, **kwargs):
+        """trends_dialy()
+        
+        Returns the top 20 trending topics for each hour in a given day.
+
+        Parameters:
+            date - The start date for the report. The date should be formatted
+                   YYYY-MM-DD. A 404 error will be thrown if the date is older
+                   than the available search index (7-10 days). Dates in the
+                   future will be forced to the current date.
+          
+            exclude - Setting this equal to hashtags will remove all hashtags
+                      from the trends list.
+                            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            if len(kwargs) > 0:
+                url = "http://api.twitter.com/%s/trends/daily.json?%s"%(version, urllib.urlencode(kwargs))
+            else:
+                url = "http://api.twitter.com/%s/trends/daily.json"%version                
+            return simplejson.load(self.opener.open(url))
+        except HTTPError, e:
+            raise RequestError("trends_dialy(): %s"%e.msg, e.code)
+        
+    def trends_weekly(self, version=None, **kwargs):
+        """trends_weekly()
+        
+        Returns the top 30 trending topics for each day in a given week.
+
+        Parameters:
+            date - The start date for the report. The date should be formatted
+                   YYYY-MM-DD. A 404 error will be thrown if the date is older
+                   than the available search index (3-4 weeks). Dates in the
+                   future will be forced to the current date.
+          
+            exclude - Setting this equal to hashtags will remove all hashtags
+                      from the trends list.
+                            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            if len(kwargs) > 0:
+                url = "http://api.twitter.com/%d/trends/weekly.json?%s"%(version, urllib.urlencode(kwargs))
+            else:
+                url = "http://api.twitter.com/%d/trends/weekly.json"%version                
+            return simplejson.load(self.opener.open(url))
+        except HTTPError, e:
+            raise RequestError("trends_weekly(): %s"%e.msg, e.code)
+        
+    ############################################################################
+    ## Local trends methods
+    ############################################################################
+    
+    def trends_available(self, version=None, **kwargs):
+        """trends_available()
+        
+        Returns the locations that Twitter has trending topic information for.
+
+        The response is an array of "locations" that encode the location's WOEID
+        and some other human-readable information such as a canonical name and
+        country the location belongs in.
+
+        A WOEID is a Yahoo! Where On Earth ID.
+
+        Parameters:
+            lat - If provided with a long parameter the available trend
+                  locations will be sorted by distance, nearest to furthest, to
+                  the co-ordinate pair. The valid ranges for longitude is -180.0
+                  to +180.0 (East is positive) inclusive.
+          
+            long - If provided with a lat parameter the available trend
+                   locations will be sorted by distance, nearest to furthest,
+                   to the co-ordinate pair. The valid ranges for longitude is
+                   -180.0 to +180.0 (East is positive) inclusive.
+                            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            if len(kwargs) > 0:
+                url = "http://api.twitter.com/%d/trends/available.json?%s"%(version, urllib.urlencode(kwargs))
+            else:
+                url = "http://api.twitter.com/%d/trends/available.json"%version                
+            return simplejson.load(self.opener.open(url))
+        except HTTPError, e:
+            raise RequestError("trends_available(): %s"%e.msg, e.code)
+        
+    def get_trends_woeid(self, woeid, version=None):
+        """get_trends_woeid(woeid)
+        
+        Returns the top 10 trending topics for a specific WOEID, if trending
+        information is available for it.
+
+        The response is an array of "trend" objects that encode the name of the
+        trending topic, the query parameter that can be used to search for the
+        topic on Twitter Search, and the Twitter Search URL.
+
+        This information is cached for 5 minutes. Requesting more frequently
+        than that will not return any more data, and will count against your
+        rate limit usage.
+
+        Parameters:
+            woeid - The Yahoo! Where On Earth ID of the location to return
+                    trending information for. Global information is available
+                    by using 1 as the WOEID. 
+                            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            return simplejson.load(self.opener.open("http://api.twitter.com/%d/trends/%d.json"%(version, woeid)))
+        except HTTPError, e:
+            raise RequestError("get_trends_woeid(): %s"%e.msg, e.code)
+    
+    ############################################################################
     ## List methods
-    ###########################################################################################################
+    ############################################################################
     
-    ###########################################################################################################
+    ############################################################################
     ## List members methods
-    ###########################################################################################################
+    ############################################################################
     
-    ###########################################################################################################
+    ############################################################################
     ## List subscribers methods
-    ###########################################################################################################
+    ############################################################################
     
-    ###########################################################################################################
+    ############################################################################
     ## Direct messages methods
-    ###########################################################################################################
+    ############################################################################
     
-    ###########################################################################################################
+    ############################################################################
     ## Friendship methods
-    ###########################################################################################################
+    ############################################################################
     
-    ###########################################################################################################
+    ############################################################################
     ## Social graph methods
-    ###########################################################################################################
+    ############################################################################
 
     def getRateLimitStatus(self, checkRequestingIP = True, version = None):
         """getRateLimitStatus()
