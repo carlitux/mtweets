@@ -396,8 +396,8 @@ class API(OAuthClient):
             raise AuthError("get_friends_timeline() requires you to be authenticated.")
         
     
-    def get_user_timeline(self, id=None, version=None, **kwargs): 
-        """get_user_timeline(id=None)
+    def get_user_timeline(self, version=None, **kwargs): 
+        """get_user_timeline()
 
         Returns the 20 most recent statuses posted by the authenticating user.
         It is also possible to request another user's timeline by using the
@@ -464,22 +464,10 @@ class API(OAuthClient):
             version (number) - API version to request. Entire mtweets class
                                defaults to 1, but you can override on a 
                                function-by-function or class basis - (version=2), etc.
-            
-        Parameters preferences: id, user_id, screen_name. If id is set then other parameters are ignored and so on.
         """
         version = version or self.apiVersion
-        userTimelineURL = "http://api.twitter.com/%d/statuses/user_timeline.json"%version
-        if id is not None:
-            # clean not necesary parameters
-            if 'user_id' in kwargs: del kwargs['user_id']
-            if 'screen_name' in kwargs: del kwargs['screen_name']
-            userTimelineURL = "http://api.twitter.com/%d/statuses/user_timeline/%s.json"%(version, id)
-        elif 'user_id' in kwargs:
-            # clean not necesary parameters
-            if 'screen_name' in kwargs: del kwargs['screen_name']
-        
         try:
-            return simplejson.load(self.fetch_resource(userTimelineURL, kwargs))
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/user_timeline.json"%version, kwargs))
         except HTTPError, e:
             raise RequestError("get_user_timeline(): %s"%e.msg, e.code)
         
@@ -1081,6 +1069,9 @@ class API(OAuthClient):
         Statuses for the users in question will be returned inline if they exist.
         Requires authentication!
         """
+        if user_id is None and screen_name is None:
+            raise RequestError('user_lookup(): Need one of the following parameter: user_id or screen_name')
+        
         version = version or self.apiVersion
         if self.is_authorized():
             if ids is not None:
@@ -2013,105 +2004,178 @@ class API(OAuthClient):
     ## Direct messages methods
     ############################################################################
     
-    def getDirectMessages(self, since_id = None, max_id = None, count = None, page = "1", version = None):
-        """getDirectMessages(since_id = None, max_id = None, count = None, page = "1")
+    def get_direct_messages(self, version=None, **kwargs):
+        """get_direct_messages()
 
-        	Returns a list of the 20 most recent direct messages sent to the authenticating user. 
+        Returns the 20 most recent direct messages sent to the authenticating
+        user. The XML and JSON versions include detailed information about the
+        sender and recipient user.
 
-        	Parameters:
-        		since_id - Optional.  Returns only statuses with an ID greater than (that is, more recent than) the specified ID.
-        		max_id - Optional.  Returns only statuses with an ID less than (that is, older than) or equal to the specified ID. 
-        		count - Optional.  Specifies the number of statuses to retrieve. May not be greater than 200.  
-        		page - Optional. Specifies the page of results to retrieve. Note: there are pagination limits.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+
+        Parameters:
+            since_id - Returns results with an ID greater than (that is, more
+                       recent than) the specified ID. There are limits to the
+                       number of Tweets which can be accessed through the API.
+                       If the limit of Tweets has occured since the since_id,
+                       the since_id will be forced to the oldest ID available.
+
+            max_id - Returns results with an ID less than (that is, older than)
+                     or equal to the specified ID.
+
+            count - Specifies the number of records to retrieve. Must be less
+                    than or equal to 200.
+
+            page - Specifies the page of results to retrieve.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.authenticated is True:
-            apiURL = "http://api.twitter.com/%d/direct_messages.json?page=%s" % (version, `page`)
-            if since_id is not None:
-                apiURL += "&since_id=%s" % `since_id`
-            if max_id is not None:
-                apiURL += "&max_id=%s" % `max_id`
-            if count is not None:
-                apiURL += "&count=%s" % `count`
-
+        if self.is_authorized():
             try:
-                return simplejson.load(self.opener.open(apiURL))
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/direct_messages.json"%(version), kwargs))
             except HTTPError, e:
-                raise mtweetsError("getDirectMessages() failed with a %s error code." % `e.code`, e.code)
+                raise RequestError("get_direct_messages(): %s"%e.msg, e.code)
         else:
-            raise AuthError("getDirectMessages() requires you to be authenticated.")
+            raise AuthError("get_direct_messages() requires authorization.")        
+        
 
-    def getSentMessages(self, since_id = None, max_id = None, count = None, page = "1", version = None):
-        """getSentMessages(since_id = None, max_id = None, count = None, page = "1")
+    def get_direct_messages_sent(self, version=None, **kwargs):
+        """get_direct_messages()
 
-        	Returns a list of the 20 most recent direct messages sent by the authenticating user.
+        Returns the 20 most recent direct messages sent by the authenticating
+        user. The XML and JSON versions include detailed information about the
+        sender and recipient user.
 
-        	Parameters:
-        		since_id - Optional.  Returns only statuses with an ID greater than (that is, more recent than) the specified ID.
-        		max_id - Optional.  Returns only statuses with an ID less than (that is, older than) or equal to the specified ID. 
-        		count - Optional.  Specifies the number of statuses to retrieve. May not be greater than 200.  
-        		page - Optional. Specifies the page of results to retrieve. Note: there are pagination limits.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        Parameters:
+            since_id - Returns results with an ID greater than (that is, more
+                       recent than) the specified ID. There are limits to the
+                       number of Tweets which can be accessed through the API.
+                       If the limit of Tweets has occured since the since_id,
+                       the since_id will be forced to the oldest ID available.
+
+            max_id - Returns results with an ID less than (that is, older than)
+                     or equal to the specified ID.
+
+            count - Specifies the number of records to retrieve. Must be less
+                    than or equal to 200.
+
+            page - Specifies the page of results to retrieve.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.authenticated is True:
-            apiURL = "http://api.twitter.com/%d/direct_messages/sent.json?page=%s" % (version, `page`)
-            if since_id is not None:
-                apiURL += "&since_id=%s" % `since_id`
-            if max_id is not None:
-                apiURL += "&max_id=%s" % `max_id`
-            if count is not None:
-                apiURL += "&count=%s" % `count`
-
+        if self.is_authorized():
             try:
-                return simplejson.load(self.opener.open(apiURL))
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/direct_messages/sent.json"%(version), kwargs))
             except HTTPError, e:
-                raise mtweetsError("getSentMessages() failed with a %s error code." % `e.code`, e.code)
+                raise RequestError("get_direct_messages(): %s"%e.msg, e.code)
         else:
-            raise AuthError("getSentMessages() requires you to be authenticated.")
+            raise AuthError("get_direct_messages() requires authorization.")  
 
-    def sendDirectMessage(self, user, text, version = None):
-        """sendDirectMessage(user, text)
+        
+    def direct_messages_new(self, text, user_id=None, screen_name=None, version = None, **kwargs):
+        """direct_messages_new(text, user_id, screen_name)
 
-        	Sends a new direct message to the specified user from the authenticating user. Requires both the user and text parameters. 
-        	Returns the sent message in the requested format when successful.
+        Sends a new direct message to the specified user from the authenticating
+        user. Requires both the user and text parameters and must be a POST.
+        Returns the sent message in the requested format if successful.
 
-        	Parameters:
-        		user - Required. The ID or screen name of the recipient user.
-        		text - Required. The text of your direct message. Be sure to keep it under 140 characters.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+
+        Parameters:
+            screen_name - The screen name of the user who should receive the
+                          direct message. Helpful for disambiguating when a
+                          valid screen name is also a user ID.
+
+            user_id - The ID of the user who should receive the direct message.
+                      Helpful for disambiguating when a valid user ID is also a
+                      valid screen name.
+
+            text - The text of your direct message. Be sure to URL encode as
+                   necessary, and keep the message under 140 characters.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
+        if user_id is None and screen_name is None:
+            raise RequestError('direct_messages_new(): Need one of the following parameter: user_id or screen_name')
+        
         version = version or self.apiVersion
-        if self.authenticated is True:
-            if len(list(text)) < 140:
-                try:
-                    return self.opener.open("http://api.twitter.com/%d/direct_messages/new.json" % version, urllib.urlencode({"user": user, "text": text}))
-                except HTTPError, e:
-                    raise mtweetsError("sendDirectMessage() failed with a %s error code." % `e.code`, e.code)
-            else:
-                raise mtweetsError("Your message must not be longer than 140 characters")
-        else:
-            raise AuthError("You must be authenticated to send a new direct message.")
-
-    def destroyDirectMessage(self, id, version = None):
-        """destroyDirectMessage(id)
-
-        	Destroys the direct message specified in the required ID parameter.
-        	The authenticating user must be the recipient of the specified direct message.
-
-        	Parameters:
-        		id - Required. The ID of the direct message to destroy.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
+        if self.is_authorized():
             try:
-                return self.opener.open("http://api.twitter.com/%d/direct_messages/destroy/%s.json" % (version, id), "")
+                if user_id is not None:
+                    kwargs['user_id'] = user_id
+                if screen_name is not None:
+                    kwargs['screen_name'] = screen_name
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/direct_messages/new.json"%(version), kwargs, 'POST'))
             except HTTPError, e:
-                raise mtweetsError("destroyDirectMessage() failed with a %s error code." % `e.code`, e.code)
+                raise RequestError("direct_messages_new(): %s"%e.msg, e.code)
         else:
-            raise AuthError("You must be authenticated to destroy a direct message.")
+            raise AuthError("direct_messages_new() requires authorization.")
+        
+
+    def direct_messages_destroy(self, id, version=None, **kwargs):
+        """direct_messages_destroy(id)
+
+        Destroys the direct message specified in the required ID parameter. The
+        authenticating user must be the recipient of the specified direct message.
+
+       	Parameters:
+            id - The ID of the direct message to delete. 
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        
+        if self.is_authorized():
+            try:
+                return self.opener.open("http://api.twitter.com/%d/direct_messages/destroy/%s.json" % (version, id), kwargs, 'POST')
+            except HTTPError, e:
+                raise RequestError("direct_messages_destroy(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("direct_messages_destroy() requires authorization.")
     
     ############################################################################
     ## Friendship methods
