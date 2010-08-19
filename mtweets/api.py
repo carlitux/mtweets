@@ -1487,108 +1487,636 @@ class API(OAuthClient):
     ## List methods
     ############################################################################
     
+    def user_list(self, user, name, version=None, **kwargs):
+        """user_list(user, name)
+        
+        Creates a new list for the authenticated user. Accounts are limited to
+        20 lists.
+        
+        Parameters:
+            user - username
+
+            name - The name for the list.
+          
+            mode - Whether your list is public or private. Values can be public
+                   or private. If no mode is specified the list will be public.
+          
+            description - The description to give the list. 
+                    
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            kwargs['name'] = name
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists.json"%(version, user), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("user_list(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("user_list() requires authorization.")
+        
+    def user_list_id(self, user, id, version=None, **kwargs):
+        """user_list_id(user, id)
+        
+        Updates the specified list.
+        
+        Parameters:
+            user - username
+            
+            id - The id or slug of the list.
+
+            name - The name for the list.
+          
+            mode - Whether your list is public or private. Values can be public
+                   or private. If no mode is specified the list will be public.
+          
+            description - The description to give the list. 
+                    
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("user_list_id(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("user_list_id() requires authorization.")  
+        
+        
+    def get_user_list(self, user, version=None, **kwargs):
+        """get_user_list(user)
+        
+        List the lists of the specified user. Private lists will be included if
+        the authenticated users is the same as the user who's lists are being
+        returned.
+        
+        Parameters:
+            user - twitter username
+          
+            cursor - Breaks the results into pages. A single page contains 20
+                     lists. Provide a value of -1 to begin paging. Provide
+                     values as returned in the response body's next_cursor and
+                     previous_cursor attributes to page back and forth in the list. 
+                    
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists.json"%(version, user), kwargs))
+            except HTTPError, e:
+                raise RequestError("get_user_list(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("get_user_list() requires authorization.")
+        
+        
+    def get_user_list_id(self, user, id, version=None, **kwargs):
+        """get_user_list_id(user, id)
+        
+        Show the specified list. Private lists will only be shown if the
+        authenticated user owns the specified list.
+        
+        Parameters:
+            user - username
+
+            id - The id or slug of the list.
+                    
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs))
+            except HTTPError, e:
+                raise RequestError("get_user_list_id(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("get_user_list_id() requires authorization.")
+        
+    def delete_user_list_id(self, user, id, version=None, **kwargs):
+        """delete_user_list_id(user, id)
+        
+        Deletes the specified list. Must be owned by the authenticated user.
+        
+        Parameters:
+            user - username
+            
+            id - The id or slug of the list.
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                kwargs['_method'] = 'DELETE' # to support REST delete method
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("delete_user_list_id(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("delete_user_list_id() requires authorization.")
+        
+    def get_user_list_statuses(self, user, id, version=None, **kwargs):
+        """get_user_list_statuses(user, id)
+        
+        Show tweet timeline for members of the specified list.
+        
+        Parameters:
+            user - username
+            
+            id - The id or slug of the list.
+            
+            since_id - Returns results with an ID greater than (that is, more
+                       recent than) the specified ID. There are limits to the
+                       number of Tweets which can be accessed through the API.
+                       If the limit of Tweets has occured since the since_id,
+                       the since_id will be forced to the oldest ID available.
+
+            max_id - Returns results with an ID less than (that is, older than)
+                     or equal to the specified ID.
+
+            per_page - Specifies the page of results to retrieve.
+
+            page - Specifies the page of results to retrieve.
+
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s/statuses.json"%(version, user, id), kwargs, 'POST'))
+        except HTTPError, e:
+            raise RequestError("get_user_list_statuses(): %s"%e.msg, e.code)
+        
+    def get_user_list_memberships(self, user, version=None, **kwargs):
+        """get_user_list_memberships(user)
+        
+        List the lists the specified user has been added to.
+        
+        Parameters:
+            user - username
+            
+            cursor - Breaks the results into pages. A single page contains 20
+                     lists. Provide a value of -1 to begin paging. Provide
+                     values as returned in the response body's next_cursor and
+                     previous_cursor attributes to page back and forth in the list. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/memberships.json"%(version, user), kwargs))
+            except HTTPError, e:
+                raise RequestError("get_user_list_memberships(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("get_user_list_memberships() requires authorization.")
+        
+    def get_user_list_subscriptions(self, user, version=None, **kwargs):
+        """get_user_list_subscriptions(user)
+        
+        List the lists the specified user follows.
+        
+        Parameters:
+            user - username
+            
+            cursor - Breaks the results into pages. A single page contains 20
+                     lists. Provide a value of -1 to begin paging. Provide
+                     values as returned in the response body's next_cursor and
+                     previous_cursor attributes to page back and forth in the list. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/subscriptions.json"%(version, user), kwargs))
+            except HTTPError, e:
+                raise RequestError("get_user_list_subscriptions(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("get_user_list_subscriptions() requires authorization.")
+    
     ############################################################################
     ## List members methods
     ############################################################################
     
+    def get_user_list_members(self, user, id, version=None, **kwargs):
+        """get_user_list_members(user, id)
+        
+        Returns the members of the specified list.
+        
+        Parameters:
+            user - username
+            
+            id - The id or slug of the list. 
+            
+            cursor - Breaks the results into pages. A single page contains 20
+                     lists. Provide a value of -1 to begin paging. Provide
+                     values as returned in the response body's next_cursor and
+                     previous_cursor attributes to page back and forth in the list. 
+                     
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, id), kwargs))
+            except HTTPError, e:
+                raise RequestError("get_user_list_members(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("get_user_list_members() requires authorization.")
+        
+        
+    def add_user_list_members(self, user, list_id, user_id, version=None, **kwargs):
+        """add_user_list_members(user, list_id, user_id)
+        
+        Add a member to a list. The authenticated user must own the list to be
+        able to add members to it. Lists are limited to having 500 members.
+        
+        Parameters:
+            user - username
+            
+            list_id - The id or slug of the list. 
+            
+            user_id - The user id of the list member.
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                kwargs['id'] = user_id
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, list_id), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("add_user_list_members(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("add_user_list_members() requires authorization.")
+    
+    
+    def user_list_members_create_all(self, user, list_id, ids, screen_names, version=None, **kwargs):
+        """user_list_members_create_all(user, list_id, ids, screen_names)
+        
+        Adds multiple members to a list, by specifying a comma-separated list of
+        member ids or screen names. The authenticated user must own the list to
+        be able to add members to it. Lists are limited to having 500 members,
+        and you are limited to adding up to 100 members to a list at a time with
+        this method.
+        
+        Parameters:
+            user - username
+            
+            list_id - The id or slug of the list.
+            
+            ids - iterable object with users id.
+
+            screen_names - iterable object with screen_names. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                kwargs['user_id'] = ','.join(ids)
+                kwargs['screen_name'] = ','.join(screen_names)
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%s/%s/%s/create_all.json"%(version, user, list_id), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("user_list_members_create_all(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("user_list_members_create_all() requires authorization.")
+        
+    def delete_user_list_members(self, user, list_id, user_id, version=None, **kwargs):
+        """delete_user_list_members(user, list_id, user_id)
+        
+        Removes the specified member from the list. The authenticated user must
+        be the list's owner to remove members from the list.
+        
+        Parameters:
+            user - username
+            
+            list_id - The id or slug of the list. 
+            
+            user_id - The user id of the list member.
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                kwargs['id'] = user_id
+                kwargs['_method'] = 'DELETE'
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, list_id), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("delete_user_list_members(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("delete_user_list_members() requires authorization.")
+        
+    
+    def user_list_is_member(self, user, list_id, user_id, version=None, **kwargs):
+        """user_list_is_member(user, list_id, user_id)
+        
+        Check if a user is a member of the specified list.
+        
+        Parameters:
+            user - username
+            
+            list_id - The id or slug of the list. 
+            
+            user_id - The user id of the list member.
+            
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/members/%s.json"%(version, user, list_id, user_id), kwargs))
+            except HTTPError, e:
+                raise RequestError("user_list_is_member(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("user_list_is_member() requires authorization.")
+        
     ############################################################################
     ## List subscribers methods
     ############################################################################
+    
+    def get_user_list_subscribers(self, user, id, version=None, **kwargs):
+        """get_user_list_subscribers(user, id)
+        
+        Returns the subscribers of the specified list.
+        
+        Parameters:
+            user - username
+            
+            id - The id or slug of the list. 
+            
+            cursor - Breaks the results into pages. A single page contains 20
+                     lists. Provide a value of -1 to begin paging. Provide
+                     values as returned in the response body's next_cursor and
+                     previous_cursor attributes to page back and forth in the list. 
+                     
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, id), kwargs))
+            except HTTPError, e:
+                raise RequestError("get_user_list_subscribers(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("get_user_list_subscribers() requires authorization.")
+        
+    def user_list_subscribers(self, user, list_id, version=None, **kwargs):
+        """user_list_subscribers(user, list_id)
+        
+        Make the authenticated user follow the specified list.
+        
+        Parameters:
+            user - username
+            
+            list_id - The id or slug of the list. 
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, list_id), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("user_list_subscribers(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("user_list_subscribers() requires authorization.")
+    
+    
+    def delete_user_list_subscribers(self, user, list_id, version=None, **kwargs):
+        """delete_user_list_subscribers(user, list_id)
+        
+        Unsubscribes the authenticated user form the specified list.
+        
+        Parameters:
+            user - username of current user authenticated
+            
+            list_id - The id or slug of the list. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                kwargs['_method'] = 'DELETE'
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, list_id), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("delete_user_list_subscribers(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("delete_user_list_subscribers() requires authorization.")
+        
+    
+    def user_list_is_subscriber(self, user, list_id, user_id, version=None, **kwargs):
+        """user_list_is_subscriber(user, list_id, user_id)
+        
+        Check if a user is a subscriber of the specified list.
+        
+        Parameters:
+            user - username of current user authenticated
+            
+            list_id - The id or slug of the list. 
+            
+            user_id - The user id of the list member.
+            
+            include_entities - When set to either true, t or 1, each tweet will
+                               include a node called "entities,". This node
+                               offers a variety of metadata about the tweet in a
+                               discreet structure, including: user_mentions,
+                               urls, and hashtags. While entities are opt-in on
+                               timelines at present, they will be made a default
+                               component of output in the future. See Tweet
+                               Entities for more detail on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers/%s.json"%(version, user, list_id, user_id), kwargs))
+            except HTTPError, e:
+                raise RequestError("user_list_is_subscriber(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("user_list_is_subscriber() requires authorization.")
     
     ############################################################################
     ## Direct messages methods
     ############################################################################
     
-    ############################################################################
-    ## Friendship methods
-    ############################################################################
-    
-    ############################################################################
-    ## Social graph methods
-    ############################################################################
+    def getDirectMessages(self, since_id = None, max_id = None, count = None, page = "1", version = None):
+        """getDirectMessages(since_id = None, max_id = None, count = None, page = "1")
 
-    def getRateLimitStatus(self, checkRequestingIP = True, version = None):
-        """getRateLimitStatus()
-
-        	Returns the remaining number of API requests available to the requesting user before the
-        	API limit is reached for the current hour. Calls to rate_limit_status do not count against
-        	the rate limit.  If authentication credentials are provided, the rate limit status for the
-        	authenticating user is returned.  Otherwise, the rate limit status for the requesting
-        	IP address is returned.
-
-        	Params:
-        		checkRequestIP - Boolean, defaults to True. Set to False to check against the currently requesting IP, instead of the account level.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion	
-        try:
-            if checkRequestingIP is True:
-                return simplejson.load(urllib2.urlopen("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
-            else:
-                if self.authenticated is True:
-                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
-                else:
-                    raise mtweetsError("You need to be authenticated to check a rate limit status on an account.")
-        except HTTPError, e:
-            raise mtweetsError("It seems that there's something wrong. Twitter gave you a %s error code; are you doing something you shouldn't be?" % `e.code`, e.code)
-   
-
-    def reportSpam(self, id = None, user_id = None, screen_name = None, version = None):
-        """reportSpam(self, id), user_id, screen_name):
-
-        	Report a user account to Twitter as a spam account. *One* of the following parameters is required, and
-        	this requires that you be authenticated with a user account.
+        	Returns a list of the 20 most recent direct messages sent to the authenticating user. 
 
         	Parameters:
-        		id - Optional. The ID or screen_name of the user you want to report as a spammer.
-        		user_id - Optional.  The ID of the user you want to report as a spammer. Helpful for disambiguating when a valid user ID is also a valid screen name.
-        		screen_name - Optional.  The ID or screen_name of the user you want to report as a spammer. Helpful for disambiguating when a valid screen name is also a user ID.
+        		since_id - Optional.  Returns only statuses with an ID greater than (that is, more recent than) the specified ID.
+        		max_id - Optional.  Returns only statuses with an ID less than (that is, older than) or equal to the specified ID. 
+        		count - Optional.  Specifies the number of statuses to retrieve. May not be greater than 200.  
+        		page - Optional. Specifies the page of results to retrieve. Note: there are pagination limits.
         		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
         if self.authenticated is True:
-            # This entire block of code is stupid, but I'm far too tired to think through it at the moment. Refactor it if you care.
-            if id is not None or user_id is not None or screen_name is not None:
-                try:
-                    apiExtension = ""
-                    if id is not None:
-                        apiExtension = "id=%s" % id
-                    if user_id is not None:
-                        apiExtension = "user_id=%s" % `user_id`
-                    if screen_name is not None:
-                        apiExtension = "screen_name=%s" % screen_name
-                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/report_spam.json" % version, apiExtension))
-                except HTTPError, e:
-                    raise mtweetsError("reportSpam() failed with a %s error code." % `e.code`, e.code)
-            else:
-                raise mtweetsError("reportSpam requires you to specify an id, user_id, or screen_name. Try again!")
+            apiURL = "http://api.twitter.com/%d/direct_messages.json?page=%s" % (version, `page`)
+            if since_id is not None:
+                apiURL += "&since_id=%s" % `since_id`
+            if max_id is not None:
+                apiURL += "&max_id=%s" % `max_id`
+            if count is not None:
+                apiURL += "&count=%s" % `count`
+
+            try:
+                return simplejson.load(self.opener.open(apiURL))
+            except HTTPError, e:
+                raise mtweetsError("getDirectMessages() failed with a %s error code." % `e.code`, e.code)
         else:
-            raise AuthError("reportSpam() requires you to be authenticated.")
+            raise AuthError("getDirectMessages() requires you to be authenticated.")
 
-    def searchUsers(self, q, per_page = 20, page = 1, version = None):
-        """ searchUsers(q, per_page = None, page = None):
+    def getSentMessages(self, since_id = None, max_id = None, count = None, page = "1", version = None):
+        """getSentMessages(since_id = None, max_id = None, count = None, page = "1")
 
-        	Query Twitter to find a set of users who match the criteria we have. (Note: This, oddly, requires authentication - go figure)
+        	Returns a list of the 20 most recent direct messages sent by the authenticating user.
 
         	Parameters:
-        		q (string) - Required. The query you wanna search against; self explanatory. ;)
-        		per_page (number) - Optional, defaults to 20. Specify the number of users Twitter should return per page (no more than 20, just fyi)
-        		page (number) - Optional, defaults to 1. The page of users you want to pull down.
+        		since_id - Optional.  Returns only statuses with an ID greater than (that is, more recent than) the specified ID.
+        		max_id - Optional.  Returns only statuses with an ID less than (that is, older than) or equal to the specified ID. 
+        		count - Optional.  Specifies the number of statuses to retrieve. May not be greater than 200.  
+        		page - Optional. Specifies the page of results to retrieve. Note: there are pagination limits.
+        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.authenticated is True:
+            apiURL = "http://api.twitter.com/%d/direct_messages/sent.json?page=%s" % (version, `page`)
+            if since_id is not None:
+                apiURL += "&since_id=%s" % `since_id`
+            if max_id is not None:
+                apiURL += "&max_id=%s" % `max_id`
+            if count is not None:
+                apiURL += "&count=%s" % `count`
+
+            try:
+                return simplejson.load(self.opener.open(apiURL))
+            except HTTPError, e:
+                raise mtweetsError("getSentMessages() failed with a %s error code." % `e.code`, e.code)
+        else:
+            raise AuthError("getSentMessages() requires you to be authenticated.")
+
+    def sendDirectMessage(self, user, text, version = None):
+        """sendDirectMessage(user, text)
+
+        	Sends a new direct message to the specified user from the authenticating user. Requires both the user and text parameters. 
+        	Returns the sent message in the requested format when successful.
+
+        	Parameters:
+        		user - Required. The ID or screen name of the recipient user.
+        		text - Required. The text of your direct message. Be sure to keep it under 140 characters.
+        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.authenticated is True:
+            if len(list(text)) < 140:
+                try:
+                    return self.opener.open("http://api.twitter.com/%d/direct_messages/new.json" % version, urllib.urlencode({"user": user, "text": text}))
+                except HTTPError, e:
+                    raise mtweetsError("sendDirectMessage() failed with a %s error code." % `e.code`, e.code)
+            else:
+                raise mtweetsError("Your message must not be longer than 140 characters")
+        else:
+            raise AuthError("You must be authenticated to send a new direct message.")
+
+    def destroyDirectMessage(self, id, version = None):
+        """destroyDirectMessage(id)
+
+        	Destroys the direct message specified in the required ID parameter.
+        	The authenticating user must be the recipient of the specified direct message.
+
+        	Parameters:
+        		id - Required. The ID of the direct message to destroy.
         		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
         if self.authenticated is True:
             try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/users/search.json?q=%s&per_page=%d&page=%d" % (version, q, per_page, page)))
+                return self.opener.open("http://api.twitter.com/%d/direct_messages/destroy/%s.json" % (version, id), "")
             except HTTPError, e:
-                raise mtweetsError("searchUsers() failed with a %d error code." % e.code, e.code)
+                raise mtweetsError("destroyDirectMessage() failed with a %s error code." % `e.code`, e.code)
         else:
-            raise AuthError("searchUsers(), oddly, requires you to be authenticated.")
-
+            raise AuthError("You must be authenticated to destroy a direct message.")
     
-
+    ############################################################################
+    ## Friendship methods
+    ############################################################################
     
-
     def getFriendsStatus(self, id = None, user_id = None, screen_name = None, page = None, cursor="-1", version = None):
         """getFriendsStatus(id = None, user_id = None, screen_name = None, page = None, cursor="-1")
 
@@ -1689,105 +2217,7 @@ class API(OAuthClient):
         else:
             raise AuthError("You can't end a session when you're not authenticated to begin with.")
 
-    def getDirectMessages(self, since_id = None, max_id = None, count = None, page = "1", version = None):
-        """getDirectMessages(since_id = None, max_id = None, count = None, page = "1")
-
-        	Returns a list of the 20 most recent direct messages sent to the authenticating user. 
-
-        	Parameters:
-        		since_id - Optional.  Returns only statuses with an ID greater than (that is, more recent than) the specified ID.
-        		max_id - Optional.  Returns only statuses with an ID less than (that is, older than) or equal to the specified ID. 
-        		count - Optional.  Specifies the number of statuses to retrieve. May not be greater than 200.  
-        		page - Optional. Specifies the page of results to retrieve. Note: there are pagination limits.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            apiURL = "http://api.twitter.com/%d/direct_messages.json?page=%s" % (version, `page`)
-            if since_id is not None:
-                apiURL += "&since_id=%s" % `since_id`
-            if max_id is not None:
-                apiURL += "&max_id=%s" % `max_id`
-            if count is not None:
-                apiURL += "&count=%s" % `count`
-
-            try:
-                return simplejson.load(self.opener.open(apiURL))
-            except HTTPError, e:
-                raise mtweetsError("getDirectMessages() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("getDirectMessages() requires you to be authenticated.")
-
-    def getSentMessages(self, since_id = None, max_id = None, count = None, page = "1", version = None):
-        """getSentMessages(since_id = None, max_id = None, count = None, page = "1")
-
-        	Returns a list of the 20 most recent direct messages sent by the authenticating user.
-
-        	Parameters:
-        		since_id - Optional.  Returns only statuses with an ID greater than (that is, more recent than) the specified ID.
-        		max_id - Optional.  Returns only statuses with an ID less than (that is, older than) or equal to the specified ID. 
-        		count - Optional.  Specifies the number of statuses to retrieve. May not be greater than 200.  
-        		page - Optional. Specifies the page of results to retrieve. Note: there are pagination limits.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            apiURL = "http://api.twitter.com/%d/direct_messages/sent.json?page=%s" % (version, `page`)
-            if since_id is not None:
-                apiURL += "&since_id=%s" % `since_id`
-            if max_id is not None:
-                apiURL += "&max_id=%s" % `max_id`
-            if count is not None:
-                apiURL += "&count=%s" % `count`
-
-            try:
-                return simplejson.load(self.opener.open(apiURL))
-            except HTTPError, e:
-                raise mtweetsError("getSentMessages() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("getSentMessages() requires you to be authenticated.")
-
-    def sendDirectMessage(self, user, text, version = None):
-        """sendDirectMessage(user, text)
-
-        	Sends a new direct message to the specified user from the authenticating user. Requires both the user and text parameters. 
-        	Returns the sent message in the requested format when successful.
-
-        	Parameters:
-        		user - Required. The ID or screen name of the recipient user.
-        		text - Required. The text of your direct message. Be sure to keep it under 140 characters.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            if len(list(text)) < 140:
-                try:
-                    return self.opener.open("http://api.twitter.com/%d/direct_messages/new.json" % version, urllib.urlencode({"user": user, "text": text}))
-                except HTTPError, e:
-                    raise mtweetsError("sendDirectMessage() failed with a %s error code." % `e.code`, e.code)
-            else:
-                raise mtweetsError("Your message must not be longer than 140 characters")
-        else:
-            raise AuthError("You must be authenticated to send a new direct message.")
-
-    def destroyDirectMessage(self, id, version = None):
-        """destroyDirectMessage(id)
-
-        	Destroys the direct message specified in the required ID parameter.
-        	The authenticating user must be the recipient of the specified direct message.
-
-        	Parameters:
-        		id - Required. The ID of the direct message to destroy.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return self.opener.open("http://api.twitter.com/%d/direct_messages/destroy/%s.json" % (version, id), "")
-            except HTTPError, e:
-                raise mtweetsError("destroyDirectMessage() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("You must be authenticated to destroy a direct message.")
+    
 
     def createFriendship(self, id = None, user_id = None, screen_name = None, follow = "false", version = None):
         """createFriendship(id = None, user_id = None, screen_name = None, follow = "false")
@@ -1913,6 +2343,94 @@ class API(OAuthClient):
                 raise AuthError("You're unauthenticated, and forgot to pass a source for this method. Try again!")
             raise mtweetsError("showFriendship() failed with a %s error code." % `e.code`, e.code)
 
+    
+    ############################################################################
+    ## Social graph methods
+    ############################################################################
+
+    def getRateLimitStatus(self, checkRequestingIP = True, version = None):
+        """getRateLimitStatus()
+
+        	Returns the remaining number of API requests available to the requesting user before the
+        	API limit is reached for the current hour. Calls to rate_limit_status do not count against
+        	the rate limit.  If authentication credentials are provided, the rate limit status for the
+        	authenticating user is returned.  Otherwise, the rate limit status for the requesting
+        	IP address is returned.
+
+        	Params:
+        		checkRequestIP - Boolean, defaults to True. Set to False to check against the currently requesting IP, instead of the account level.
+        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion	
+        try:
+            if checkRequestingIP is True:
+                return simplejson.load(urllib2.urlopen("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
+            else:
+                if self.authenticated is True:
+                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
+                else:
+                    raise mtweetsError("You need to be authenticated to check a rate limit status on an account.")
+        except HTTPError, e:
+            raise mtweetsError("It seems that there's something wrong. Twitter gave you a %s error code; are you doing something you shouldn't be?" % `e.code`, e.code)
+   
+
+    def reportSpam(self, id = None, user_id = None, screen_name = None, version = None):
+        """reportSpam(self, id), user_id, screen_name):
+
+        	Report a user account to Twitter as a spam account. *One* of the following parameters is required, and
+        	this requires that you be authenticated with a user account.
+
+        	Parameters:
+        		id - Optional. The ID or screen_name of the user you want to report as a spammer.
+        		user_id - Optional.  The ID of the user you want to report as a spammer. Helpful for disambiguating when a valid user ID is also a valid screen name.
+        		screen_name - Optional.  The ID or screen_name of the user you want to report as a spammer. Helpful for disambiguating when a valid screen name is also a user ID.
+        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.authenticated is True:
+            # This entire block of code is stupid, but I'm far too tired to think through it at the moment. Refactor it if you care.
+            if id is not None or user_id is not None or screen_name is not None:
+                try:
+                    apiExtension = ""
+                    if id is not None:
+                        apiExtension = "id=%s" % id
+                    if user_id is not None:
+                        apiExtension = "user_id=%s" % `user_id`
+                    if screen_name is not None:
+                        apiExtension = "screen_name=%s" % screen_name
+                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/report_spam.json" % version, apiExtension))
+                except HTTPError, e:
+                    raise mtweetsError("reportSpam() failed with a %s error code." % `e.code`, e.code)
+            else:
+                raise mtweetsError("reportSpam requires you to specify an id, user_id, or screen_name. Try again!")
+        else:
+            raise AuthError("reportSpam() requires you to be authenticated.")
+
+    def searchUsers(self, q, per_page = 20, page = 1, version = None):
+        """ searchUsers(q, per_page = None, page = None):
+
+        	Query Twitter to find a set of users who match the criteria we have. (Note: This, oddly, requires authentication - go figure)
+
+        	Parameters:
+        		q (string) - Required. The query you wanna search against; self explanatory. ;)
+        		per_page (number) - Optional, defaults to 20. Specify the number of users Twitter should return per page (no more than 20, just fyi)
+        		page (number) - Optional, defaults to 1. The page of users you want to pull down.
+        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.authenticated is True:
+            try:
+                return simplejson.load(self.opener.open("http://api.twitter.com/%d/users/search.json?q=%s&per_page=%d&page=%d" % (version, q, per_page, page)))
+            except HTTPError, e:
+                raise mtweetsError("searchUsers() failed with a %d error code." % e.code, e.code)
+        else:
+            raise AuthError("searchUsers(), oddly, requires you to be authenticated.")
+
+    
+
+    
+
+    
     def updateDeliveryDevice(self, device_name = "none", version = None):
         """updateDeliveryDevice(device_name = "none")
 
