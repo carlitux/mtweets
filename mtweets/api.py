@@ -2171,12 +2171,188 @@ class API(OAuthClient):
         
         if self.is_authorized():
             try:
-                return self.opener.open("http://api.twitter.com/%d/direct_messages/destroy/%s.json" % (version, id), kwargs, 'POST')
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/direct_messages/destroy/%s.json" % (version, id), kwargs, 'POST'))
             except HTTPError, e:
                 raise RequestError("direct_messages_destroy(): %s"%e.msg, e.code)
         else:
             raise AuthError("direct_messages_destroy() requires authorization.")
     
+    ############################################################################
+    ## Friendship methods
+    ############################################################################
+    
+    def friendship_create(self, version=None, **kwargs):
+        """friendship_create()
+
+        Allows the authenticating users to follow the user specified in the ID
+        parameter.
+
+        Returns the befriended user in the requested format when successful.
+        Returns a string describing the failure condition when unsuccessful. If
+        you are already friends with the user an HTTP 403 will be returned.
+
+       	Parameters:
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID.
+
+            follow - Enable notifications for the target user.  
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/create.json"%(version), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("friendship_create(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("friendship_create() requires authorization.")
+        
+        
+    def friendship_destroy(self, version=None, **kwargs):
+        """friendship_destroy()
+
+        Allows the authenticating users to unfollow the user specified in the ID
+        parameter.
+
+        Returns the unfollowed user in the requested format when successful.
+        Returns a string describing the failure condition when unsuccessful.
+
+       	Parameters:
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID.
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/destroy.json"%(version), kwargs, 'POST'))
+            except HTTPError, e:
+                raise RequestError("friendship_destroy(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("friendship_destroy() requires authorization.")
+        
+    def friendship_exists(self, user_a, user_b, version=None, **kwargs):
+        """friendship_exists()
+    
+        Test for the existence of friendship between two users. Will return true
+        if user_a follows user_b, otherwise will return false.
+
+        Consider using friendships/show instead of this method.
+
+       	Parameters:
+            user_a - The ID or screen_name of the subject user.
+
+            user_b - The ID or screen_name of the user to test for following. 
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        
+        try:
+            kwargs['user_a'] = user_a
+            kwargs['user_b'] = user_b
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/exists.json"%(version), kwargs))
+        except HTTPError, e:
+            raise RequestError("friendship_exists(): %s"%e.msg, e.code)
+        
+    def friendship_show(self, version=None, **kwargs):
+        """friendship_show()
+    
+        Returns detailed information about the relationship between two users.
+
+       	Parameters:
+            source_id - The user_id of the subject user.
+
+            source_screen_name - The screen_name of the subject user.
+
+            target_id - The user_id of the target user.
+
+            target_screen_name - The screen_name of the target user.  
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        
+        try:
+            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/show.json"%(version), kwargs))
+        except HTTPError, e:
+            raise RequestError("friendship_show(): %s"%e.msg, e.code)
+        
+    def friendship_incoming(self, version=None, **kwargs):
+        """friendship_incoming()
+    
+        Returns detailed information about the relationship between two users.
+
+       	Parameters:
+            cursor - Breaks the results into pages. This is recommended for
+                     users who are following many users. Provide a value of -1
+                     to begin paging. Provide values as returned in the response
+                     body's next_cursor and previous_cursor attributes to page
+                     back and forth in the list.   
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/incoming.json"%(version), kwargs))
+            except HTTPError, e:
+                raise RequestError("friendship_incoming(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("friendship_incoming() requires authorization.")
+        
+    def friendship_outgoing(self, version=None, **kwargs):
+        """friendship_outgoing()
+    
+        Returns an array of numeric IDs for every protected user for whom the
+        authenticating user has a pending follow request.
+
+       	Parameters:
+            cursor - Breaks the results into pages. This is recommended for
+                     users who are following many users. Provide a value of -1
+                     to begin paging. Provide values as returned in the response
+                     body's next_cursor and previous_cursor attributes to page
+                     back and forth in the list.   
+                               
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        
+        if self.is_authorized():
+            try:
+                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/outgoing.json"%(version), kwargs))
+            except HTTPError, e:
+                raise RequestError("friendship_outgoing(): %s"%e.msg, e.code)
+        else:
+            raise AuthError("friendship_outgoing() requires authorization.")
+        
     ############################################################################
     ## Friendship methods
     ############################################################################
