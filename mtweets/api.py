@@ -14,6 +14,7 @@ like as Tweet entities, and how use each parameter
 """
 
 import httplib, urllib, urllib2, mimetypes, mimetools
+import functools
 
 from urlparse import urlparse
 from urllib2 import HTTPError
@@ -35,24 +36,50 @@ try:
 except ImportError:
     raise Exception("mtweets requires the oauth clien library to work. http://github.com/carlitux/Python-OAuth-Client")
 
+def _authentication_required(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        if self.is_authorized():
+            try:
+                return simplejson.load(func(self, *args, **kwargs))
+            except HTTPError, e:
+                raise RequestError("%s(): %s"%(func.__name__, e.msg), e.code)
+        else:
+            raise AuthError("%s(): requires you to be authenticated"%(func.__name__))
+    return wrapper
+
+def _simple_decorator(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:               
+            return simplejson.load(func(self, *args, **kwargs))
+        except HTTPError, e:
+            raise RequestError("%s(): %s"%(func.__name__, e.msg), e.code)
+    return wrapper
+
 class RequestError(Exception):
     def __init__(self, msg, error_code='0'):
         self.msg = msg
         self.error_code = error_code
         
     def __str__(self):
-        return "Error code: %s\n%s"%(self.error_code, self.msg)
+        return "Error code: %s -> %s"%(self.error_code, self.msg)
 
 class AuthError(Exception):
     def __init__(self, msg):
         self.msg = msg
         
     def __str__(self):
-        return repr(self.msg)
+        return str(self.msg)
 
 
 class API(OAuthClient):
     """ This handle simple authentication flow.
+    
+    convention for methods: 'resource'_'action'
+    ej:
+        API.public_timeline_get
+        API.direct_message_create
     
     For desktop application should set the verifier field into the token 
     returned by fetch_for_authorize method before call fetch_access_token method.    
@@ -216,8 +243,9 @@ class API(OAuthClient):
     ## Timeline methods
     ############################################################################
     
-    def get_public_timeline(self, version=None, **kwargs):
-        """get_public_timeline()
+    @_simple_decorator
+    def public_timeline_get(self, version=None, **kwargs):
+        """public_timeline_get()
 
         Returns the 20 most recent statuses, including retweets if they exist,
         from non-protected users.
@@ -246,18 +274,17 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            if len(kwargs) > 0:
-                url = "http://api.twitter.com/%d/statuses/public_timeline.json?%s"%(version, urllib.urlencode(kwargs))
-            else:
-                url = "http://api.twitter.com/%d/statuses/public_timeline.json"%version                
-            return simplejson.load(self.opener.open(url))
-        except HTTPError, e:
-            raise RequestError("get_public_timeline(): %s"%e.msg, e.code)
         
+        if len(kwargs) > 0:
+            url = "http://api.twitter.com/%d/statuses/public_timeline.json?%s"%(version, urllib.urlencode(kwargs))
+        else:
+            url = "http://api.twitter.com/%d/statuses/public_timeline.json"%version
+            
+        return self.opener.open(url)
         
-    def get_home_timeline(self, version=None, **kwargs):
-        """get_home_timeline()
+    @_authentication_required
+    def home_timeline_get(self, version=None, **kwargs):
+        """home_timeline_get()
 
         Returns the 20 most recent statuses, including retweets if they exist,
         posted by the authenticating user and the user's they follow. This is
@@ -301,17 +328,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/home_timeline.json"%version, kwargs))
-            except HTTPError, e:
-                raise RequestError("get_home_timeline(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_home_timeline() requires you to be authenticated.")
-      
-        
-    def get_friends_timeline(self, version=None, **kwargs):
-        """get_friends_timeline()
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/home_timeline.json"%version, kwargs)      
+    
+    @_authentication_required
+    def friends_timeline_get(self, version=None, **kwargs):
+        """friends_timeline_get()
 
         Returns the 20 most recent statuses posted by the authenticating user
         and the user's they follow. This is the same timeline seen by a user
@@ -367,17 +388,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized() is True:
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/friends_timeline.json"%version, kwargs))
-            except HTTPError, e:
-                raise RequestError("get_friends_timeline(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_friends_timeline() requires you to be authenticated.")
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/friends_timeline.json"%version, kwargs)
         
-    
-    def get_user_timeline(self, version=None, **kwargs): 
-        """get_user_timeline()
+    @_simple_decorator
+    def user_timeline_get(self, version=None, **kwargs): 
+        """user_timeline_get()
 
         Returns the 20 most recent statuses posted by the authenticating user.
         It is also possible to request another user's timeline by using the
@@ -446,14 +461,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/user_timeline.json"%version, kwargs))
-        except HTTPError, e:
-            raise RequestError("get_user_timeline(): %s"%e.msg, e.code)
-        
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/user_timeline.json"%version, kwargs)
     
-    def get_mentions(self, version=None, **kwargs):
-        """get_mentions()
+    @_authentication_required
+    def mentions_get(self, version=None, **kwargs):
+        """mentions_get()
 
         Returns the 20 most recent mentions (status containing @username) for
         the authenticating user.
@@ -510,18 +522,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/mentions.json"%version, kwargs)
         
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/mentions.json"%version, kwargs))
-            except HTTPError, e:
-                raise RequestError("get_mentions(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_mentions() requires authorization.")
-        
-    
-    def get_retweeted_of_me(self, version=None, **kwargs):
-        """get_retweeted_of_me()
+    @_authentication_required
+    def retweeted_of_me_get(self, version=None, **kwargs):
+        """retweeted_of_me_get()
 
         Returns the 20 most recent tweets of the authenticated user that have
         been retweeted by others.
@@ -561,18 +566,11 @@ class API(OAuthClient):
 
         """
         version = version or self.apiVersion
-        
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweets_of_me.json"%version, kwargs))
-            except HTTPError, e:
-                raise RequestError("get_retweeted_of_me(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_retweeted_of_me() requires authorization.")
-        
-
-    def get_retweeted_by_me(self, version=None, **kwargs):
-        """get_retweeted_by_me()
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/retweets_of_me.json"%version, kwargs)
+    
+    @_authentication_required
+    def retweeted_by_me_get(self, version=None, **kwargs):
+        """retweeted_by_me_get()
 
         Returns the 20 most recent retweets posted by the authenticating user.
 
@@ -611,18 +609,11 @@ class API(OAuthClient):
 
         """
         version = version or self.apiVersion
-        
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweeted_by_me.json"%version, kwargs))
-            except HTTPError, e:
-                raise RequestError("get_retweeted_by_me(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_retweeted_by_me() requires authorization.")
-        
-
-    def get_retweeted_to_me(self, version=None, **kwargs):
-        """get_retweeted_to_me()
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/retweeted_by_me.json"%version, kwargs)
+                
+    @_authentication_required
+    def retweeted_to_me_get(self, version=None, **kwargs):
+        """retweeted_to_me_get()
 
         Returns the 20 most recent retweets posted by users the authenticating
         user follow.
@@ -661,20 +652,13 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweeted_to_me.json"%version, kwargs))
-            except HTTPError, e:
-                raise RequestError("get_retweeted_to_me(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_retweeted_to_me() requires authorization.")
-        
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/retweeted_to_me.json"%version, kwargs)
         
     ############################################################################
     ## Status methods
     ############################################################################
     
+    @_simple_decorator
     def status_show(self, id, version=None, **kwargs):
         """status_show()
 
@@ -703,13 +687,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/show/%d.json"%(version, id), kwargs)
         
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/show/%d.json"%(version, id), kwargs))
-        except HTTPError, e:
-            raise RequestError("status_show(): %s"%e.msg, e.code)
-        
-    
+    @_authentication_required
     def status_update(self, status, version=None, **kwargs):
         """status_update(status)
 
@@ -761,16 +741,9 @@ class API(OAuthClient):
         """
         version = version or self.apiVersion
         kwargs['status'] = status
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/update.json"%version, kwargs, 'POST')
         
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/update.json"%version, kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("status_update(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("status_update() requires authorization.")
-        
-
+    @_authentication_required
     def status_destroy(self, id, version=None, **kwargs):
         """status_destroy(id)
 
@@ -799,16 +772,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/destroy/%s.json"%(version, id), kwargs, 'POST')
         
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/destroy/%s.json"%(version, id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("status_destroy(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("status_destroy() requires authorization.")        
-        
-    
+    @_authentication_required    
     def status_retweet(self, id, version=None, **kwargs):
         """status_retweet(id)
 
@@ -836,18 +802,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/retweet/%s.json"%(version, id), kwargs, 'POST')
         
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweet/%s.json"%(version, id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("status_retweet(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("status_retweet() requires authorization.")
-        
-    
-    def get_retweets(self, id, version=None, **kwargs):
-        """get_retweets(id):
+    @_simple_decorator
+    def retweets_get(self, id, version=None, **kwargs):
+        """retweets_get(id):
     
         Returns up to 100 of the first retweets of a given tweet.
 
@@ -876,14 +835,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/retweets/%s.json"%(version, id), kwargs))
-        except HTTPError, e:
-            raise RequestError("get_retweets(): %s"%e.msg, e.code)
-        
-        
-    def get_retweeted_by(self, id, version=None, **kwargs):
-        """get_retweeted_by(id):
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/retweets/%s.json"%(version, id), kwargs)
+    
+    @_authentication_required
+    def retweeted_by_get(self, id, version=None, **kwargs):
+        """retweeted_by_get(id):
     
         Show user objects of up to 100 members who retweeted the status.
 
@@ -914,16 +870,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/%s/retweeted_by.json"%(version, id), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_retweeted_by(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_retweeted_by() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/%s/retweeted_by.json"%(version, id), kwargs)
     
-    def get_retweeted_by_ids(self, id, version=None, **kwargs):
-        """get_retweeted_by_ids(id):
+    @_authentication_required
+    def retweeted_by_ids_get(self, id, version=None, **kwargs):
+        """retweeted_by_ids_get(id):
     
         Show user ids of up to 100 users who retweeted the status.
 
@@ -954,19 +905,13 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/%s/retweeted_by/ids.json"%(version, id), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_retweeted_by_ids(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_retweeted_by_ids() requires authorization.")
-        
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/%s/retweeted_by/ids.json"%(version, id), kwargs)
     
     ############################################################################
     ## User methods
     ############################################################################
         
+    @_simple_decorator
     def user_show(self, user_id=None, screen_name=None, version=None, **kwargs):
         """user_show(user_id=None, screen_name=None)
 
@@ -1011,13 +956,10 @@ class API(OAuthClient):
             kwargs['user_id'] = user_id
         if screen_name is not None:
             kwargs['screen_name'] = screen_name
-                    
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/show.json"%(version), kwargs))
-        except HTTPError, e:
-            raise RequestError("user_show(): %s"%e.msg, e.code)
+            
+        return self.fetch_resource("http://api.twitter.com/%d/users/show.json"%(version), kwargs)
     
-    
+    @_authentication_required
     def user_lookup(self, ids=None, screen_names=None, version=None, **kwargs):
         """user_lookup(ids=None, screen_names=None)
         
@@ -1053,19 +995,14 @@ class API(OAuthClient):
             raise RequestError('user_lookup(): Need one of the following parameter: user_id or screen_name')
         
         version = version or self.apiVersion
-        if self.is_authorized():
-            if ids is not None:
-                kwargs['user_id'] = ','.join(ids)
-            if screen_names is not None:
-                kwargs['screen_name'] = ','.join(screen_names)
-            try:
-                # do a POST request this beacuse the parameters can overflow the maximum GET length
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/lookup.json"%version, kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("user_lookup(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("user_lookup() requires authorization.")
+        if ids is not None:
+            kwargs['user_id'] = ','.join(ids)
+        if screen_names is not None:
+            kwargs['screen_name'] = ','.join(screen_names)
+            
+        return self.fetch_resource("http://api.twitter.com/%d/users/lookup.json"%version, kwargs, 'POST')
         
+    @_authentication_required
     def user_search(self, query, version=None, **kwargs):
         """user_search(query)
         
@@ -1097,15 +1034,10 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            kwargs['q'] = query
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/search.json"%version, kwargs))
-            except HTTPError, e:
-                raise RequestError("user_search(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("user_search() requires authorization.")
+        kwargs['q'] = query
+        return self.fetch_resource("http://api.twitter.com/%d/users/search.json"%version, kwargs)
         
+    @_simple_decorator
     def user_suggestions(self, version=None):
         """user_suggestions()
         
@@ -1119,11 +1051,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/suggestions.json"%version))
-        except HTTPError, e:
-            raise RequestError("user_suggestions(): %s"%e.msg, e.code)
-        
+        return self.fetch_resource("http://api.twitter.com/%d/users/suggestions.json"%version)
+    
+    @_simple_decorator
     def user_suggestions_slug(self, slug, version=None):
         """user_suggestions_slug(slug)
         
@@ -1139,11 +1069,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/suggestions/%s.json"%(version, slug)))
-        except HTTPError, e:
-            raise RequestError("user_suggestions_slug(): %s"%e.msg, e.code)
-        
+        return self.fetch_resource("http://api.twitter.com/%d/users/suggestions/%s.json"%(version, slug))
+    
+    @_simple_decorator
     def user_profile_image(self, screen_name, version=None, **kwargs):
         """user_profile_image(screen_name)
         
@@ -1174,11 +1102,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/users/profile_image/%s.json"%(version, screen_name), kwargs))
-        except HTTPError, e:
-            raise RequestError("user_profile_image(): %s"%e.msg, e.code)
-        
+        return self.fetch_resource("http://api.twitter.com/%d/users/profile_image/%s.json"%(version, screen_name), kwargs)
+    
+    @_simple_decorator
     def user_statuses_friends(self, version=None, **kwargs):
         """user_statuses_friends()
         
@@ -1227,12 +1153,9 @@ class API(OAuthClient):
                that user).
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/friends.json"%(version), kwargs))
-        except HTTPError, e:
-            raise RequestError("user_statuses_friends(): %s"%e.msg, e.code)
-        
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/friends.json"%(version), kwargs)
     
+    @_simple_decorator
     def user_statuses_followers(self, version=None, **kwargs):
         """user_statuses_followers()
                
@@ -1276,17 +1199,15 @@ class API(OAuthClient):
                that user).
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/statuses/followers.json"%(version), kwargs))
-        except HTTPError, e:
-            raise RequestError("user_statuses_followers(): %s"%e.msg, e.code)
-        
+        return self.fetch_resource("http://api.twitter.com/%d/statuses/followers.json"%(version), kwargs)
+    
     ############################################################################
     ## Trends methods
     ############################################################################
     
-    def get_trends(self, version=None):
-        """user_statuses_followers()
+    @_simple_decorator
+    def trends_get(self, version=None):
+        """trends_get()
                
         Returns the top ten topics that are currently trending on Twitter. The
         response includes the time of the request, the name of each trend, and
@@ -1298,11 +1219,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.opener.open("http://api.twitter.com/%d/trends.json"%(version)))
-        except HTTPError, e:
-            raise RequestError("get_trends(): %s"%e.msg, e.code)
+        return self.opener.open("http://api.twitter.com/%d/trends.json"%(version))
         
+    @_simple_decorator
     def trends_current(self, version=None, **kwargs):
         """trends_current()
         
@@ -1319,16 +1238,13 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            if len(kwargs) > 0:
-                url = "http://api.twitter.com/%d/trends/current.json?%s"%(version, urllib.urlencode(kwargs))
-            else:
-                url = "http://api.twitter.com/%d/trends/current.json"%version                
-            return simplejson.load(self.opener.open(url))
-        except HTTPError, e:
-            raise RequestError("trends_current(): %s"%e.msg, e.code)
-        
-        
+        if len(kwargs) > 0:
+            url = "http://api.twitter.com/%d/trends/current.json?%s"%(version, urllib.urlencode(kwargs))
+        else:
+            url = "http://api.twitter.com/%d/trends/current.json"%version                
+        return self.opener.open(url)        
+    
+    @_simple_decorator
     def trends_dialy(self, version=None, **kwargs):
         """trends_dialy()
         
@@ -1348,15 +1264,13 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            if len(kwargs) > 0:
-                url = "http://api.twitter.com/%s/trends/daily.json?%s"%(version, urllib.urlencode(kwargs))
-            else:
-                url = "http://api.twitter.com/%s/trends/daily.json"%version                
-            return simplejson.load(self.opener.open(url))
-        except HTTPError, e:
-            raise RequestError("trends_dialy(): %s"%e.msg, e.code)
-        
+        if len(kwargs) > 0:
+            url = "http://api.twitter.com/%s/trends/daily.json?%s"%(version, urllib.urlencode(kwargs))
+        else:
+            url = "http://api.twitter.com/%s/trends/daily.json"%version                
+        return self.opener.open(url)
+
+    @_simple_decorator
     def trends_weekly(self, version=None, **kwargs):
         """trends_weekly()
         
@@ -1376,19 +1290,17 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            if len(kwargs) > 0:
-                url = "http://api.twitter.com/%d/trends/weekly.json?%s"%(version, urllib.urlencode(kwargs))
-            else:
-                url = "http://api.twitter.com/%d/trends/weekly.json"%version                
-            return simplejson.load(self.opener.open(url))
-        except HTTPError, e:
-            raise RequestError("trends_weekly(): %s"%e.msg, e.code)
+        if len(kwargs) > 0:
+            url = "http://api.twitter.com/%d/trends/weekly.json?%s"%(version, urllib.urlencode(kwargs))
+        else:
+            url = "http://api.twitter.com/%d/trends/weekly.json"%version                
+        return self.opener.open(url)
         
     ############################################################################
     ## Local trends methods
     ############################################################################
     
+    @_simple_decorator
     def trends_available(self, version=None, **kwargs):
         """trends_available()
         
@@ -1416,17 +1328,15 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            if len(kwargs) > 0:
-                url = "http://api.twitter.com/%d/trends/available.json?%s"%(version, urllib.urlencode(kwargs))
-            else:
-                url = "http://api.twitter.com/%d/trends/available.json"%version                
-            return simplejson.load(self.opener.open(url))
-        except HTTPError, e:
-            raise RequestError("trends_available(): %s"%e.msg, e.code)
-        
-    def get_trends_woeid(self, woeid, version=None):
-        """get_trends_woeid(woeid)
+        if len(kwargs) > 0:
+            url = "http://api.twitter.com/%d/trends/available.json?%s"%(version, urllib.urlencode(kwargs))
+        else:
+            url = "http://api.twitter.com/%d/trends/available.json"%version                
+        return self.opener.open(url)
+    
+    @_simple_decorator
+    def trends_woeid_get(self, woeid, version=None):
+        """trends_woeid_get(woeid)
         
         Returns the top 10 trending topics for a specific WOEID, if trending
         information is available for it.
@@ -1449,15 +1359,13 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.opener.open("http://api.twitter.com/%d/trends/%d.json"%(version, woeid)))
-        except HTTPError, e:
-            raise RequestError("get_trends_woeid(): %s"%e.msg, e.code)
+        return self.opener.open("http://api.twitter.com/%d/trends/%d.json"%(version, woeid))
     
     ############################################################################
     ## List methods
     ############################################################################
     
+    @_authentication_required
     def user_list(self, user, name, version=None, **kwargs):
         """user_list(user, name)
         
@@ -1479,15 +1387,10 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            kwargs['name'] = name
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists.json"%(version, user), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("user_list(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("user_list() requires authorization.")
-        
+        kwargs['name'] = name
+        return self.fetch_resource("http://api.twitter.com/%d/%s/lists.json"%(version, user), kwargs, 'POST')
+    
+    @_authentication_required
     def user_list_id(self, user, id, version=None, **kwargs):
         """user_list_id(user, id)
         
@@ -1510,16 +1413,10 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("user_list_id(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("user_list_id() requires authorization.")  
-        
-        
-    def get_user_list(self, user, version=None, **kwargs):
+        return self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs, 'POST')
+            
+    @_authentication_required    
+    def user_list_get(self, user, version=None, **kwargs):
         """get_user_list(user)
         
         List the lists of the specified user. Private lists will be included if
@@ -1539,16 +1436,10 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists.json"%(version, user), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_user_list(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_user_list() requires authorization.")
-        
-        
-    def get_user_list_id(self, user, id, version=None, **kwargs):
+        return self.fetch_resource("http://api.twitter.com/%d/%s/lists.json"%(version, user), kwargs)
+    
+    @_authentication_required
+    def user_list_id_get(self, user, id, version=None, **kwargs):
         """get_user_list_id(user, id)
         
         Show the specified list. Private lists will only be shown if the
@@ -1564,16 +1455,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_user_list_id(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_user_list_id() requires authorization.")
-        
-    def delete_user_list_id(self, user, id, version=None, **kwargs):
-        """delete_user_list_id(user, id)
+        return self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs)
+    
+    @_authentication_required
+    def user_list_id_delete(self, user, id, version=None, **kwargs):
+        """user_list_id_delete(user, id)
         
         Deletes the specified list. Must be owned by the authenticated user.
         
@@ -1587,17 +1473,12 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                kwargs['_method'] = 'DELETE' # to support REST delete method
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("delete_user_list_id(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("delete_user_list_id() requires authorization.")
-        
-    def get_user_list_statuses(self, user, id, version=None, **kwargs):
-        """get_user_list_statuses(user, id)
+        kwargs['_method'] = 'DELETE' # to support REST delete method
+        return self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s.json"%(version, user, id), kwargs, 'POST')
+    
+    @_simple_decorator
+    def user_list_statuses_get(self, user, id, version=None, **kwargs):
+        """user_list_statuses_get(user, id)
         
         Show tweet timeline for members of the specified list.
         
@@ -1633,13 +1514,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/%s/statuses.json"%(version, user, id), kwargs, 'POST'))
-        except HTTPError, e:
-            raise RequestError("get_user_list_statuses(): %s"%e.msg, e.code)
+        return self.opener.open("http://api.twitter.com/%d/%s/lists/%s/statuses.json?%s"%(version, user, id, urllib.urlencode(kwargs)))
         
-    def get_user_list_memberships(self, user, version=None, **kwargs):
-        """get_user_list_memberships(user)
+    @_authentication_required
+    def user_list_memberships_get(self, user, version=None, **kwargs):
+        """user_list_memberships_get(user)
         
         List the lists the specified user has been added to.
         
@@ -1656,16 +1535,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/memberships.json"%(version, user), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_user_list_memberships(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_user_list_memberships() requires authorization.")
-        
-    def get_user_list_subscriptions(self, user, version=None, **kwargs):
-        """get_user_list_subscriptions(user)
+        return self.fetch_resource("http://api.twitter.com/%d/%s/lists/memberships.json"%(version, user), kwargs)
+    
+    @_authentication_required
+    def user_list_subscriptions_get(self, user, version=None, **kwargs):
+        """user_list_subscriptions_get(user)
         
         List the lists the specified user follows.
         
@@ -1682,20 +1556,15 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/lists/subscriptions.json"%(version, user), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_user_list_subscriptions(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_user_list_subscriptions() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/%s/lists/subscriptions.json"%(version, user), kwargs)
     
     ############################################################################
     ## List members methods
     ############################################################################
     
-    def get_user_list_members(self, user, id, version=None, **kwargs):
-        """get_user_list_members(user, id)
+    @_authentication_required
+    def user_list_members_get(self, user, id, version=None, **kwargs):
+        """user_list_members_get(user, id)
         
         Returns the members of the specified list.
         
@@ -1723,17 +1592,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, id), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_user_list_members(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_user_list_members() requires authorization.")
-        
-        
-    def add_user_list_members(self, user, list_id, user_id, version=None, **kwargs):
-        """add_user_list_members(user, list_id, user_id)
+        return self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, id), kwargs)
+    
+    @_authentication_required
+    def user_list_members_add(self, user, list_id, user_id, version=None, **kwargs):
+        """user_list_members_add(user, list_id, user_id)
         
         Add a member to a list. The authenticated user must own the list to be
         able to add members to it. Lists are limited to having 500 members.
@@ -1750,16 +1613,10 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                kwargs['id'] = user_id
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, list_id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("add_user_list_members(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("add_user_list_members() requires authorization.")
+        kwargs['id'] = user_id
+        return self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, list_id), kwargs, 'POST')
     
-    
+    @_authentication_required
     def user_list_members_create_all(self, user, list_id, ids, screen_names, version=None, **kwargs):
         """user_list_members_create_all(user, list_id, ids, screen_names)
         
@@ -1783,20 +1640,15 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                if ids is not None:
-                    kwargs['user_id'] = ','.join(ids)
-                if screen_names is not None:
-                    kwargs['screen_name'] = ','.join(screen_names)
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%s/%s/%s/create_all.json"%(version, user, list_id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("user_list_members_create_all(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("user_list_members_create_all() requires authorization.")
-        
-    def delete_user_list_members(self, user, list_id, user_id, version=None, **kwargs):
-        """delete_user_list_members(user, list_id, user_id)
+        if ids is not None:
+            kwargs['user_id'] = ','.join(ids)
+        if screen_names is not None:
+            kwargs['screen_name'] = ','.join(screen_names)
+        return self.fetch_resource("http://api.twitter.com/%s/%s/%s/create_all.json"%(version, user, list_id), kwargs, 'POST')
+    
+    @_authentication_required
+    def user_list_members_delete(self, user, list_id, user_id, version=None, **kwargs):
+        """user_list_members_delete(user, list_id, user_id)
         
         Removes the specified member from the list. The authenticated user must
         be the list's owner to remove members from the list.
@@ -1813,17 +1665,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                kwargs['id'] = user_id
-                kwargs['_method'] = 'DELETE'
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, list_id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("delete_user_list_members(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("delete_user_list_members() requires authorization.")
+        kwargs['id'] = user_id
+        kwargs['_method'] = 'DELETE'
+        return self.fetch_resource("http://api.twitter.com/%d/%s/%s/members.json"%(version, user, list_id), kwargs, 'POST')
         
-    
+    @_authentication_required
     def user_list_is_member(self, user, list_id, user_id, version=None, **kwargs):
         """user_list_is_member(user, list_id, user_id)
         
@@ -1850,20 +1696,15 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/members/%s.json"%(version, user, list_id, user_id), kwargs))
-            except HTTPError, e:
-                raise RequestError("user_list_is_member(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("user_list_is_member() requires authorization.")
-        
+        return self.fetch_resource("http://api.twitter.com/%d/%s/%s/members/%s.json"%(version, user, list_id, user_id), kwargs)
+    
     ############################################################################
     ## List subscribers methods
     ############################################################################
     
-    def get_user_list_subscribers(self, user, id, version=None, **kwargs):
-        """get_user_list_subscribers(user, id)
+    @_authentication_required
+    def user_list_subscribers_get(self, user, id, version=None, **kwargs):
+        """user_list_subscribers_get(user, id)
         
         Returns the subscribers of the specified list.
         
@@ -1891,14 +1732,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, id), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_user_list_subscribers(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_user_list_subscribers() requires authorization.")
-        
+        return self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, id), kwargs)
+    
+    @_authentication_required
     def user_list_subscribers(self, user, list_id, version=None, **kwargs):
         """user_list_subscribers(user, list_id)
         
@@ -1914,17 +1750,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, list_id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("user_list_subscribers(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("user_list_subscribers() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, list_id), kwargs, 'POST')
     
-    
-    def delete_user_list_subscribers(self, user, list_id, version=None, **kwargs):
-        """delete_user_list_subscribers(user, list_id)
+    @_authentication_required
+    def user_list_subscribers_delete(self, user, list_id, version=None, **kwargs):
+        """user_list_subscribers_delete(user, list_id)
         
         Unsubscribes the authenticated user form the specified list.
         
@@ -1938,16 +1768,10 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                kwargs['_method'] = 'DELETE'
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, list_id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("delete_user_list_subscribers(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("delete_user_list_subscribers() requires authorization.")
-        
-    
+        kwargs['_method'] = 'DELETE'
+        return self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers.json"%(version, user, list_id), kwargs, 'POST')
+            
+    @_authentication_required
     def user_list_is_subscriber(self, user, list_id, user_id, version=None, **kwargs):
         """user_list_is_subscriber(user, list_id, user_id)
         
@@ -1974,20 +1798,15 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers/%s.json"%(version, user, list_id, user_id), kwargs))
-            except HTTPError, e:
-                raise RequestError("user_list_is_subscriber(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("user_list_is_subscriber() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/%s/%s/subscribers/%s.json"%(version, user, list_id, user_id), kwargs)
     
     ############################################################################
     ## Direct messages methods
     ############################################################################
     
-    def get_direct_messages(self, version=None, **kwargs):
-        """get_direct_messages()
+    @_authentication_required
+    def direct_messages_get(self, version=None, **kwargs):
+        """direct_messages_get()
 
         Returns the 20 most recent direct messages sent to the authenticating
         user. The XML and JSON versions include detailed information about the
@@ -2023,17 +1842,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/direct_messages.json"%(version), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_direct_messages(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_direct_messages() requires authorization.")        
-        
-
-    def get_direct_messages_sent(self, version=None, **kwargs):
-        """get_direct_messages()
+        return self.fetch_resource("http://api.twitter.com/%d/direct_messages.json"%(version), kwargs)
+            
+    @_authentication_required
+    def direct_messages_sent_get(self, version=None, **kwargs):
+        """direct_messages_sent_get()
 
         Returns the 20 most recent direct messages sent by the authenticating
         user. The XML and JSON versions include detailed information about the
@@ -2068,15 +1881,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/direct_messages/sent.json"%(version), kwargs))
-            except HTTPError, e:
-                raise RequestError("get_direct_messages(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("get_direct_messages() requires authorization.")  
-
-        
+        return self.fetch_resource("http://api.twitter.com/%d/direct_messages/sent.json"%(version), kwargs)
+    
+    @_authentication_required
     def direct_messages_new(self, text, user_id=None, screen_name=None, version = None, **kwargs):
         """direct_messages_new(text, user_id, screen_name)
 
@@ -2114,19 +1921,15 @@ class API(OAuthClient):
             raise RequestError('direct_messages_new(): Need one of the following parameter: user_id or screen_name')
         
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                if user_id is not None:
-                    kwargs['user_id'] = user_id
-                if screen_name is not None:
-                    kwargs['screen_name'] = screen_name
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/direct_messages/new.json"%(version), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("direct_messages_new(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("direct_messages_new() requires authorization.")
         
+        if user_id is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
+            
+        return self.fetch_resource("http://api.twitter.com/%d/direct_messages/new.json"%(version), kwargs, 'POST')        
 
+    @_authentication_required
     def direct_messages_destroy(self, id, version=None, **kwargs):
         """direct_messages_destroy(id)
 
@@ -2150,19 +1953,13 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/direct_messages/destroy/%s.json" % (version, id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("direct_messages_destroy(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("direct_messages_destroy() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/direct_messages/destroy/%s.json" % (version, id), kwargs, 'POST')
     
     ############################################################################
     ## Friendship methods
     ############################################################################
     
+    @_authentication_required
     def friendship_create(self, version=None, **kwargs):
         """friendship_create()
 
@@ -2189,16 +1986,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/create.json"%(version), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("friendship_create(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("friendship_create() requires authorization.")
-        
-        
+        return self.fetch_resource("http://api.twitter.com/%d/friendships/create.json"%(version), kwargs, 'POST')
+    
+    @_authentication_required    
     def friendship_destroy(self, version=None, **kwargs):
         """friendship_destroy()
 
@@ -2222,15 +2012,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/destroy.json"%(version), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("friendship_destroy(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("friendship_destroy() requires authorization.")
-        
+        return self.fetch_resource("http://api.twitter.com/%d/friendships/destroy.json"%(version), kwargs, 'POST')
+    
+    @_simple_decorator
     def friendship_exists(self, user_a, user_b, version=None, **kwargs):
         """friendship_exists()
     
@@ -2249,14 +2033,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
+        kwargs['user_a'] = user_a
+        kwargs['user_b'] = user_b
+        return self.fetch_resource("http://api.twitter.com/%d/friendships/exists.json"%(version), kwargs)
         
-        try:
-            kwargs['user_a'] = user_a
-            kwargs['user_b'] = user_b
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/exists.json"%(version), kwargs))
-        except HTTPError, e:
-            raise RequestError("friendship_exists(): %s"%e.msg, e.code)
-        
+    @_simple_decorator
     def friendship_show(self, version=None, **kwargs):
         """friendship_show()
     
@@ -2276,12 +2057,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/show.json"%(version), kwargs))
-        except HTTPError, e:
-            raise RequestError("friendship_show(): %s"%e.msg, e.code)
-        
+        return self.fetch_resource("http://api.twitter.com/%d/friendships/show.json"%(version), kwargs)
+    
+    @_authentication_required
     def friendship_incoming(self, version=None, **kwargs):
         """friendship_incoming()
     
@@ -2299,15 +2077,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/incoming.json"%(version), kwargs))
-            except HTTPError, e:
-                raise RequestError("friendship_incoming(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("friendship_incoming() requires authorization.")
-        
+        return self.fetch_resource("http://api.twitter.com/%d/friendships/incoming.json"%(version), kwargs)
+    
+    @_authentication_required
     def friendship_outgoing(self, version=None, **kwargs):
         """friendship_outgoing()
     
@@ -2326,21 +2098,15 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friendships/outgoing.json"%(version), kwargs))
-            except HTTPError, e:
-                raise RequestError("friendship_outgoing(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("friendship_outgoing() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/friendships/outgoing.json"%(version), kwargs)
         
     ############################################################################
     ## Friends and Followers methods
     ############################################################################
     
-    def get_friendship_ids(self, user_id, screen_name=None, version=None, **kwargs):
-        """get_friendship_ids(user_id, screen_name=None)
+    @_simple_decorator
+    def friendship_ids_get(self, user_id=None, screen_name=None, version=None, **kwargs):
+        """friendship_ids_get(user_id, screen_name=None)
             
         Returns an array of numeric IDs for every user the specified user is
         following.
@@ -2371,20 +2137,21 @@ class API(OAuthClient):
                                defaults to 1, but you can override on a 
                                function-by-function or class basis - (version=2), etc.
         """
+        if user_id is None and screen_name is None:
+            raise RequestError('friendship_ids_get(): Need one of the following parameter: user_id or screen_name')
+        
         version = version or self.apiVersion
         
-        try:
-            if screen_name is not None:
-                kwargs['user_id'] = user_id
-            if screen_name is not None:
-                kwargs['screen_name'] = screen_name
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/friends/ids.json"%(version), kwargs))
-        except HTTPError, e:
-            raise RequestError("get_friendship_ids(): %s"%e.msg, e.code)
+        if screen_name is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
             
+        return self.fetch_resource("http://api.twitter.com/%d/friends/ids.json"%(version), kwargs)
     
-    def get_followers_ids(self, user_id, screen_name=None, version=None, **kwargs):
-        """get_followers_ids(user_id, screen_name=None)
+    @_simple_decorator
+    def followers_ids_get(self, user_id=None, screen_name=None, version=None, **kwargs):
+        """followers_ids_get(user_id, screen_name=None)
             
         Returns an array of numeric IDs for every user following the specified user.
 
@@ -2414,21 +2181,23 @@ class API(OAuthClient):
                                defaults to 1, but you can override on a 
                                function-by-function or class basis - (version=2), etc.
         """
+        if user_id is None and screen_name is None:
+            raise RequestError('followers_ids_get(): Need one of the following parameter: user_id or screen_name')
+        
         version = version or self.apiVersion
         
-        try:
-            if screen_name is not None:
-                kwargs['user_id'] = user_id
-            if screen_name is not None:
-                kwargs['screen_name'] = screen_name
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/followers/ids.json"%(version), kwargs))
-        except HTTPError, e:
-            raise RequestError("get_followers_ids(): %s"%e.msg, e.code)
+        if screen_name is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
+            
+        return self.fetch_resource("http://api.twitter.com/%d/followers/ids.json"%(version), kwargs)
 
     ############################################################################
     ## Friends and Followers methods
     ############################################################################
     
+    @_authentication_required
     def verify_credentials(self, version=None, **kwargs):
         """ verify_credentials(self, version=None):
 
@@ -2453,14 +2222,9 @@ class API(OAuthClient):
                                 function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/account/verify_credentials.json"%version, kwargs))
-            except HTTPError, e:
-                raise RequestError("verify_credentials(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("verify_credentials() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/account/verify_credentials.json"%version, kwargs)
     
+    @_simple_decorator
     def rate_limit_status(self, version=None, **kwargs):
         """ verify_credentials(self, version=None):
 
@@ -2477,11 +2241,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        try:
-            return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/account/rate_limit_status.json" % version, kwargs))
-        except HTTPError, e:
-            raise RequestError("verify_credentials(): %s"%e.msg, e.code)
-
+        return self.fetch_resource("http://api.twitter.com/%d/account/rate_limit_status.json"%version, kwargs)
+    
+    @_authentication_required
     def end_session(self, version = None):
         """endSession()
 
@@ -2494,16 +2256,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/account/end_session.json" % version))
-            except HTTPError, e:
-                raise RequestError("end_session(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("end_session() requires authorization.")
-
-    def update_delivery_device(self, device_name="none", version=None, **kwargs):
-        """update_delivery_device(device_name="none")
+        return self.fetch_resource("http://api.twitter.com/%d/account/end_session.json" % version)
+    
+    @_authentication_required
+    def delivery_device_update(self, device_name="none", version=None, **kwargs):
+        """delivery_device_update(device_name="none")
 
        	Sets which device Twitter delivers updates to for the authenticating
         user. Sending none as the device parameter will disable SMS updates.
@@ -2526,17 +2283,12 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                kwargs['device'] = device_name
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/account/update_delivery_device.json"%version, kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("update_delivery_device(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("update_delivery_device() requires authorization.")
-
-    def update_profile_colors(self, version=None, **kwargs):
-        """update_profile_colors()
+        kwargs['device'] = device_name
+        return self.fetch_resource("http://api.twitter.com/%d/account/update_delivery_device.json"%version, kwargs, 'POST')
+    
+    @_authentication_required
+    def profile_colors_update(self, version=None, **kwargs):
+        """profile_colors_update()
 
         Sets one or more hex values that control the color scheme of the
         authenticating user's profile page on twitter.com. Each parameter's
@@ -2569,17 +2321,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/account/update_profile_colors.json"%version, kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("update_profile_colors(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("update_profile_colors() requires authorization.")
-        
-        
-    def update_profile_image(self, filename, version=None, **kwargs):
-        """ update_profile_image(filename)
+        return self.fetch_resource("http://api.twitter.com/%d/account/update_profile_colors.json"%version, kwargs, 'POST')
+    
+    @_authentication_required
+    def profile_image_image(self, filename, version=None, **kwargs):
+        """ profile_image_image(filename)
 
         Updates the authenticating user's profile image. Note that this method
         expects raw multipart data, not a URL to an image.
@@ -2614,25 +2360,19 @@ class API(OAuthClient):
         
         ## FIXME: improve this method
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                files = [("image", filename, open(filename, 'rb').read())]
-                fields = []
-                content_type, body = self._encode_multipart_formdata(fields, files)
-                old_headers = self.opener.addheaders
-                self.opener.addheaders = [('Content-Type', content_type), ('Content-Length', str(len(body)))].extends(self.opener.addheaders)
-                kwargs[''] = body
-                data = self.fetch_resource("http://api.twitter.com/%d/account/update_profile_image.json"%version, kwargs, 'POST')
-                self.opener.addheaders = old_headers
-                return simplejson.load(data)
-            except HTTPError, e:
-                raise RequestError("update_profile_image(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("update_profile_image() requires authorization.")
+        files = [("image", filename, open(filename, 'rb').read())]
+        fields = []
+        content_type, body = self._encode_multipart_formdata(fields, files)
+        old_headers = self.opener.addheaders
+        self.opener.addheaders = [('Content-Type', content_type), ('Content-Length', str(len(body)))].extends(self.opener.addheaders)
+        kwargs[''] = body
+        data = self.fetch_resource("http://api.twitter.com/%d/account/update_profile_image.json"%version, kwargs, 'POST')
+        self.opener.addheaders = old_headers
+        return data
         
-    
-    def update_profile_background_image(self, filename, version=None, **kwargs):
-        """ update_profile_background_image(filename, tile="true")
+    @_authentication_required
+    def profile_background_image_update(self, filename, version=None, **kwargs):
+        """ profile_background_image_update(filename, tile="true")
 
         Updates the authenticating user's profile background image.
 
@@ -2663,24 +2403,19 @@ class API(OAuthClient):
         """
         ## FIXME: improve this method
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                files = [("image", filename, open(filename, 'rb').read())]
-                fields = []
-                content_type, body = self._encode_multipart_formdata(fields, files)
-                old_headers = self.opener.addheaders
-                self.opener.addheaders = [('Content-Type', content_type), ('Content-Length', str(len(body)))].extends(self.opener.addheaders)
-                kwargs[''] = body
-                data = self.fetch_resource("http://api.twitter.com/%d/account/update_profile_background_image.json"%version, kwargs, 'POST')
-                self.opener.addheaders = old_headers
-                return simplejson.load(data)
-            except HTTPError, e:
-                raise RequestError("update_profile_background_image(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("update_profile_background_image() requires authorization.")
+        files = [("image", filename, open(filename, 'rb').read())]
+        fields = []
+        content_type, body = self._encode_multipart_formdata(fields, files)
+        old_headers = self.opener.addheaders
+        self.opener.addheaders = [('Content-Type', content_type), ('Content-Length', str(len(body)))].extends(self.opener.addheaders)
+        kwargs[''] = body
+        data = self.fetch_resource("http://api.twitter.com/%d/account/update_profile_background_image.json"%version, kwargs, 'POST')
+        self.opener.addheaders = old_headers
+        return data
 
-    def update_profile(self, version=None, **kwargs):
-        """update_profile()
+    @_authentication_required
+    def profile_update(self, version=None, **kwargs):
+        """profile_update()
 
         Sets values that users are able to set under the "Account" tab of their
         settings page.  Only the parameters specified will be updated.
@@ -2714,20 +2449,15 @@ class API(OAuthClient):
 
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/account/update_profile.json"%version, kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("update_profile(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("update_profile() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/account/update_profile.json"%version, kwargs, 'POST')
 
     ############################################################################
     ## Favorities methods
     ############################################################################
     
-    def get_favorites(self, id=None, version=None, **kwargs):
-        """get_favorites(id=None)
+    @_authentication_required
+    def favorites_get(self, id=None, version=None, **kwargs):
+        """favorites_get(id=None)
 
         Returns the 20 most recent favorite statuses for the authenticating user
         or user specified by the ID parameter in the requested format.
@@ -2754,21 +2484,15 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                if id is not None:
-                    url = "http://api.twitter.com/%d/favorites/%s.json"%(version, id)
-                else:
-                    url = "http://api.twitter.com/%d/favorites.json"%(version)
-                return simplejson.load(self.fetch_resource(url, kwargs))
-            except HTTPError, e:
-                raise RequestError("get_favorites(): %s"%e.msg, e.code)
+        if id is not None:
+            url = "http://api.twitter.com/%d/favorites/%s.json"%(version, id)
         else:
-            raise AuthError("get_favorites() requires authorization.")
-        
-
-    def create_favorite(self, id, version=None, **kwargs):
-        """create_favorite(id)
+            url = "http://api.twitter.com/%d/favorites.json"%(version)
+        return self.fetch_resource(url, kwargs)
+    
+    @_authentication_required
+    def favorite_create(self, id, version=None, **kwargs):
+        """favorite_create(id)
 
         Favorites the status specified in the ID parameter as the authenticating
         user. Returns the favorite status when successful.
@@ -2791,16 +2515,11 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/favorites/create/%s.json"%(version, id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("create_favorite(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("create_favorite() requires authorization.")
-
-    def destroy_avorite(self, id, version=None, **kwargs):
-        """create_favorite(id)
+        return self.fetch_resource("http://api.twitter.com/%d/favorites/create/%s.json"%(version, id), kwargs, 'POST')
+    
+    @_authentication_required
+    def favorite_destroy(self, id, version=None, **kwargs):
+        """favorite_destroy(id)
 
         Un-favorites the status specified in the ID parameter as the
         authenticating user. Returns the un-favorited status in the requested
@@ -2824,18 +2543,13 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/%d/favorites/destroy/%s.json"%(version, id), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("create_favorite(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("create_favorite() requires authorization.")
+        return self.fetch_resource("http://api.twitter.com/%d/favorites/destroy/%s.json"%(version, id), kwargs, 'POST')
         
     ############################################################################
     ## Notification methods
     ############################################################################
     
+    @_authentication_required
     def notification_follow(self, version=None, **kargs):
         """notification_follow()
 
@@ -2866,14 +2580,9 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/$d/notifications/follow.json"%(version), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("notification_follow(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("notification_follow() requires authorization.")
-
+        return self.fetch_resource("http://api.twitter.com/$d/notifications/follow.json"%(version), kwargs, 'POST')
+    
+    @_authentication_required
     def notification_leave(self, version=None, **kargs):
         """notification_leave()
 
@@ -2904,98 +2613,13 @@ class API(OAuthClient):
                                function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.is_authorized():
-            try:
-                return simplejson.load(self.fetch_resource("http://api.twitter.com/$d/notifications/leave.json"%(version), kwargs, 'POST'))
-            except HTTPError, e:
-                raise RequestError("notification_leave(): %s"%e.msg, e.code)
-        else:
-            raise AuthError("notification_leave() requires authorization.")
-
+        return self.fetch_resource("http://api.twitter.com/$d/notifications/leave.json"%(version), kwargs, 'POST')
     
     ############################################################################
-    ## Social graph methods
+    ## Block methods
     ############################################################################
-
-    def getRateLimitStatus(self, checkRequestingIP = True, version = None):
-        """getRateLimitStatus()
-
-        	Returns the remaining number of API requests available to the requesting user before the
-        	API limit is reached for the current hour. Calls to rate_limit_status do not count against
-        	the rate limit.  If authentication credentials are provided, the rate limit status for the
-        	authenticating user is returned.  Otherwise, the rate limit status for the requesting
-        	IP address is returned.
-
-        	Params:
-        		checkRequestIP - Boolean, defaults to True. Set to False to check against the currently requesting IP, instead of the account level.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion	
-        try:
-            if checkRequestingIP is True:
-                return simplejson.load(urllib2.urlopen("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
-            else:
-                if self.authenticated is True:
-                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
-                else:
-                    raise mtweetsError("You need to be authenticated to check a rate limit status on an account.")
-        except HTTPError, e:
-            raise mtweetsError("It seems that there's something wrong. Twitter gave you a %s error code; are you doing something you shouldn't be?" % `e.code`, e.code)
-   
-
-    def reportSpam(self, id = None, user_id = None, screen_name = None, version = None):
-        """reportSpam(self, id), user_id, screen_name):
-
-        	Report a user account to Twitter as a spam account. *One* of the following parameters is required, and
-        	this requires that you be authenticated with a user account.
-
-        	Parameters:
-        		id - Optional. The ID or screen_name of the user you want to report as a spammer.
-        		user_id - Optional.  The ID of the user you want to report as a spammer. Helpful for disambiguating when a valid user ID is also a valid screen name.
-        		screen_name - Optional.  The ID or screen_name of the user you want to report as a spammer. Helpful for disambiguating when a valid screen name is also a user ID.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            # This entire block of code is stupid, but I'm far too tired to think through it at the moment. Refactor it if you care.
-            if id is not None or user_id is not None or screen_name is not None:
-                try:
-                    apiExtension = ""
-                    if id is not None:
-                        apiExtension = "id=%s" % id
-                    if user_id is not None:
-                        apiExtension = "user_id=%s" % `user_id`
-                    if screen_name is not None:
-                        apiExtension = "screen_name=%s" % screen_name
-                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/report_spam.json" % version, apiExtension))
-                except HTTPError, e:
-                    raise mtweetsError("reportSpam() failed with a %s error code." % `e.code`, e.code)
-            else:
-                raise mtweetsError("reportSpam requires you to specify an id, user_id, or screen_name. Try again!")
-        else:
-            raise AuthError("reportSpam() requires you to be authenticated.")
-
-    def searchUsers(self, q, per_page = 20, page = 1, version = None):
-        """ searchUsers(q, per_page = None, page = None):
-
-        	Query Twitter to find a set of users who match the criteria we have. (Note: This, oddly, requires authentication - go figure)
-
-        	Parameters:
-        		q (string) - Required. The query you wanna search against; self explanatory. ;)
-        		per_page (number) - Optional, defaults to 20. Specify the number of users Twitter should return per page (no more than 20, just fyi)
-        		page (number) - Optional, defaults to 1. The page of users you want to pull down.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/users/search.json?q=%s&per_page=%d&page=%d" % (version, q, per_page, page)))
-            except HTTPError, e:
-                raise mtweetsError("searchUsers() failed with a %d error code." % e.code, e.code)
-        else:
-            raise AuthError("searchUsers(), oddly, requires you to be authenticated.")
-
-    def createBlock(self, id, version = None):
+    
+    def block_create(self, id, version = None):
         """createBlock(id)
 
         	Blocks the user specified in the ID parameter as the authenticating user. Destroys a friendship to the blocked user if it exists. 
@@ -3093,6 +2717,90 @@ class API(OAuthClient):
                 raise mtweetsError("getBlockedIDs() failed with a %s error code." % `e.code`, e.code)
         else:
             raise AuthError("getBlockedIDs() requires you to be authenticated.")
+    
+    ############################################################################
+    ## Social graph methods
+    ############################################################################
+
+    def getRateLimitStatus(self, checkRequestingIP = True, version = None):
+        """getRateLimitStatus()
+
+        	Returns the remaining number of API requests available to the requesting user before the
+        	API limit is reached for the current hour. Calls to rate_limit_status do not count against
+        	the rate limit.  If authentication credentials are provided, the rate limit status for the
+        	authenticating user is returned.  Otherwise, the rate limit status for the requesting
+        	IP address is returned.
+
+        	Params:
+        		checkRequestIP - Boolean, defaults to True. Set to False to check against the currently requesting IP, instead of the account level.
+        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion	
+        try:
+            if checkRequestingIP is True:
+                return simplejson.load(urllib2.urlopen("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
+            else:
+                if self.authenticated is True:
+                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
+                else:
+                    raise mtweetsError("You need to be authenticated to check a rate limit status on an account.")
+        except HTTPError, e:
+            raise mtweetsError("It seems that there's something wrong. Twitter gave you a %s error code; are you doing something you shouldn't be?" % `e.code`, e.code)
+   
+
+    def reportSpam(self, id = None, user_id = None, screen_name = None, version = None):
+        """reportSpam(self, id), user_id, screen_name):
+
+        	Report a user account to Twitter as a spam account. *One* of the following parameters is required, and
+        	this requires that you be authenticated with a user account.
+
+        	Parameters:
+        		id - Optional. The ID or screen_name of the user you want to report as a spammer.
+        		user_id - Optional.  The ID of the user you want to report as a spammer. Helpful for disambiguating when a valid user ID is also a valid screen name.
+        		screen_name - Optional.  The ID or screen_name of the user you want to report as a spammer. Helpful for disambiguating when a valid screen name is also a user ID.
+        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.authenticated is True:
+            # This entire block of code is stupid, but I'm far too tired to think through it at the moment. Refactor it if you care.
+            if id is not None or user_id is not None or screen_name is not None:
+                try:
+                    apiExtension = ""
+                    if id is not None:
+                        apiExtension = "id=%s" % id
+                    if user_id is not None:
+                        apiExtension = "user_id=%s" % `user_id`
+                    if screen_name is not None:
+                        apiExtension = "screen_name=%s" % screen_name
+                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/report_spam.json" % version, apiExtension))
+                except HTTPError, e:
+                    raise mtweetsError("reportSpam() failed with a %s error code." % `e.code`, e.code)
+            else:
+                raise mtweetsError("reportSpam requires you to specify an id, user_id, or screen_name. Try again!")
+        else:
+            raise AuthError("reportSpam() requires you to be authenticated.")
+
+    def searchUsers(self, q, per_page = 20, page = 1, version = None):
+        """ searchUsers(q, per_page = None, page = None):
+
+        	Query Twitter to find a set of users who match the criteria we have. (Note: This, oddly, requires authentication - go figure)
+
+        	Parameters:
+        		q (string) - Required. The query you wanna search against; self explanatory. ;)
+        		per_page (number) - Optional, defaults to 20. Specify the number of users Twitter should return per page (no more than 20, just fyi)
+        		page (number) - Optional, defaults to 1. The page of users you want to pull down.
+        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        if self.authenticated is True:
+            try:
+                return simplejson.load(self.opener.open("http://api.twitter.com/%d/users/search.json?q=%s&per_page=%d&page=%d" % (version, q, per_page, page)))
+            except HTTPError, e:
+                raise mtweetsError("searchUsers() failed with a %d error code." % e.code, e.code)
+        else:
+            raise AuthError("searchUsers(), oddly, requires you to be authenticated.")
+
+    
 
     def searchTwitter(self, search_query, **kwargs):
         """searchTwitter(search_query, **kwargs)
