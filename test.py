@@ -61,7 +61,9 @@ def main():
     #print api.status_update("testing status update with mtweets")    
     #print api.status_destroy(21037924303)    
     #print api.status_retweet(21037278048)    
-    print dir(api.sample())
+    def show(line):
+        print line
+    print dir(api.sample(show))
     
 main()
     

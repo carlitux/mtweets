@@ -32,12 +32,13 @@ class _Producer(Thread):
     """Simple thread that notify and sends new tweets to a reiciver.
     """
     
-    def set_stream(self, stream):
+    def set_stream_callback(self, stream, callback):
         self.__stream = stream
+        self.__callback = callback
         
     def run(self):
         for line in self.__stream:
-            return line
+            self.__callback(line)
     
     def close_stream(self):
         if not self.__stream.closed:
@@ -85,7 +86,7 @@ class Stream(TwitterClient):
     ## Feeds implementation
     ############################################################################
     
-    def filter(self, **kwargs):
+    def filter(self, callback, **kwargs):
         """filter()
 
         Returns public statuses that match one or more filter predicates. At
@@ -156,7 +157,7 @@ class Stream(TwitterClient):
         if self.is_authorized():
             try:
                 p = _Producer()
-                p.set_stream(self.fetch_resource("http://stream.twitter.com/statuses/filter.json", kwargs, 'POST'))
+                p.set_stream_callback(self.fetch_resource("http://stream.twitter.com/statuses/filter.json", kwargs, 'POST'), callback)
                 p.start()
                 return p
             except HTTPError, e:
@@ -164,7 +165,7 @@ class Stream(TwitterClient):
         else:
             raise AuthError("filter(): requires you to be authenticated")
         
-    def firehose(self, **kwargs):
+    def firehose(self, callback, **kwargs):
         """firehose()
 
         Returns all public statuses. The Firehose is not a generally available
@@ -196,7 +197,7 @@ class Stream(TwitterClient):
         if self.is_authorized():
             try:
                 p = _Producer()
-                p.set_stream(self.fetch_resource("http://stream.twitter.com/statuses/firehose.json", kwargs))
+                p.set_stream_callback(self.fetch_resource("http://stream.twitter.com/statuses/firehose.json", kwargs), callback)
                 p.start()
                 return p
             except HTTPError, e:
@@ -204,7 +205,7 @@ class Stream(TwitterClient):
         else:
             raise AuthError("firehose(): requires you to be authenticated")
         
-    def retweet(self, **kwargs):
+    def retweet(self, callback, **kwargs):
         """retweet()
 
         Returns all retweets. The retweet stream is not a generally available
@@ -222,7 +223,7 @@ class Stream(TwitterClient):
         if self.is_authorized():
             try:
                 p = _Producer()
-                p.set_stream(self.fetch_resource("http://stream.twitter.com/statuses/retweet.json", kwargs))
+                p.set_stream_callback(self.fetch_resource("http://stream.twitter.com/statuses/retweet.json", kwargs), callback)
                 p.start()
                 return p
             except HTTPError, e:
@@ -230,7 +231,7 @@ class Stream(TwitterClient):
         else:
             raise AuthError("retweet(): requires you to be authenticated")
         
-    def sample(self, **kwargs):
+    def sample(self, callback, **kwargs):
         """sample()
 
         Returns a random sample of all public statuses. The default access level
@@ -263,7 +264,7 @@ class Stream(TwitterClient):
         if self.is_authorized():
             try:
                 p = _Producer()
-                p.set_stream(self.fetch_resource("http://stream.twitter.com/statuses/sample.json", kwargs))
+                p.set_stream_callback(self.fetch_resource("http://stream.twitter.com/statuses/sample.json", kwargs), callback)
                 p.start()
                 return p
             except HTTPError, e:
