@@ -13,67 +13,20 @@ Please review the online twitter docs for concepts used by twitter:
 like as Tweet entities, and how use each parameter
 """
 
-import httplib, urllib, urllib2, mimetypes, mimetools
-import functools
-
-from urlparse import urlparse
-from urllib2 import HTTPError
-
 __author__ = "Luis C. Cruz <carlitos.kyo@gmail.com>"
 __version__ = "0.1"
 
-try:
-    import simplejson
-except ImportError:
-    raise Exception("mtweets requires the simplejson library (or Python 2.6) to work. http://www.undefined.org/python/")
+import urllib, mimetypes, mimetools
 
-try:
-    from oauth import OAuthClient
-    from oauth import OAuthError
-    from oauth import OAuthConsumer
-    from oauth import OAuthRequest
-    from oauth import OAuthSignatureMethod_HMAC_SHA1
-except ImportError:
-    raise Exception("mtweets requires the oauth clien library to work. http://github.com/carlitux/Python-OAuth-Client")
+from urlparse import urlparse
 
-def _authentication_required(func):
-    @functools.wraps(func)
-    def wrapper(self, *args, **kwargs):
-        if self.is_authorized():
-            try:
-                return simplejson.load(func(self, *args, **kwargs))
-            except HTTPError, e:
-                raise RequestError("%s(): %s"%(func.__name__, e.msg), e.code)
-        else:
-            raise AuthError("%s(): requires you to be authenticated"%(func.__name__))
-    return wrapper
+from mtweets.utils import AuthError
+from mtweets.utils import RequestError
+from mtweets.utils import TwitterClient
+from mtweets.utils import simple_decorator as _simple_decorator
+from mtweets.utils import authentication_required as _authentication_required
 
-def _simple_decorator(func):
-    @functools.wraps(func)
-    def wrapper(self, *args, **kwargs):
-        try:               
-            return simplejson.load(func(self, *args, **kwargs))
-        except HTTPError, e:
-            raise RequestError("%s(): %s"%(func.__name__, e.msg), e.code)
-    return wrapper
-
-class RequestError(Exception):
-    def __init__(self, msg, error_code='0'):
-        self.msg = msg
-        self.error_code = error_code
-        
-    def __str__(self):
-        return "Error code: %s -> %s"%(self.error_code, self.msg)
-
-class AuthError(Exception):
-    def __init__(self, msg):
-        self.msg = msg
-        
-    def __str__(self):
-        return str(self.msg)
-
-
-class API(OAuthClient):
+class API(TwitterClient):
     """ This handle simple authentication flow.
     
     convention for methods: 'resource'_'action'
@@ -111,110 +64,8 @@ class API(OAuthClient):
     
     >>> api = mtweet.API((key, secret), 'my app', True)
     >>> api.oauth_datastore = datastore_object
-    >>> print api.verify_credentials()
-    
+    >>> print api.verify_credentials()    
     """
-    
-    def __init__(self, oauth_params, user_agent=None, desktop=False,
-                 force_login=False, proxy=None, version=1):
-        """
-        Instantiates an instance of mtweets. Takes optional parameters for
-        authentication and such (see below).
-
-        Parameters:
-            oauth_params - key, secret tokens for OAuth
-            
-            desktop - define if the API will be used for desktop apps or web apps.
-            
-            force_login -  Optional. Forces the user to enter their credentials
-                           to ensure the correct users account is authorized.
-                           
-            user_agent - User agent header.
-            
-            proxy - An object detailing information, in case proxy 
-                    user/authentication is required. Object passed should 
-                    be something like...
-
-            proxyobj = { 
-                "username": "fjnfsjdnfjd",
-                "password": "fjnfjsjdfnjd",
-                "host": "http://fjanfjasnfjjfnajsdfasd.com", 
-                "port": 87 
-            } 
-
-        version (number) - Twitter supports a "versioned" API as of 
-                           Oct. 16th, 2009 - this defaults to 1, but can be 
-                           overridden on a class and function-based basis.
-
-        ** Note: versioning is not currently used by search.twitter functions; 
-           when Twitter moves their junk, it'll be supported.
-        """
-        # setting super class variables
-        OAuthClient.__init__(self, OAuthConsumer(*oauth_params), None)
-        
-        # setting the the needed urls
-        self._url_request       = "https://api.twitter.com/oauth/request_token"
-        self._url_access        = "https://api.twitter.com/oauth/access_token"
-        self._url_autorize      = "https://api.twitter.com/oauth/authorize"
-        self._url_authenticate  = "https://api.twitter.com/oauth/authenticate"
-        
-        self._signature_method = OAuthSignatureMethod_HMAC_SHA1()
-        
-        # subclass variables
-        self.apiVersion = version
-        self.proxy = proxy
-        self.user_agent = user_agent
-        self.desktop = desktop
-        self.force_login = force_login
-        
-        if self.proxy is not None:
-            self.proxyobj = urllib2.ProxyHandler({'http': 'http://%s:%s@%s:%d'%(self.proxy["username"], self.proxy["password"], self.proxy["host"], self.proxy["port"])})
-            self.opener = urllib2.build_opener(self.proxyobj)
-        else:
-            self.opener = urllib2.build_opener()
-            
-        if self.user_agent is not None:
-            self.opener.addheaders = [('User-agent', self.user_agent)]
-        
-    ############################################################################
-    ## Super class implementation
-    ############################################################################
-
-    def _get_signature_method(self):
-        return self._signature_method    
-
-    def _get_request_request(self):
-        """Return an OauthRequest instance to request the token"""
-        return OAuthRequest.from_consumer_and_token(self.consumer, callback=None,
-                                                    http_url=self._url_request)
-    
-    def _get_access_request(self):
-        """Return an OauthRequest instance to authorize"""
-        return OAuthRequest.from_consumer_and_token(self.consumer, 
-                                                    token=self.token,
-                                                    verifier=self.token.verifier,
-                                                    http_url=self._url_access)
-    
-    def _get_authorize_request(self):
-        params = {}
-        if self.desktop:
-            url = self._url_autorize
-            params['oauth_callback'] = 'oob'
-        else:
-            url = self._url_authenticate
-        if self.force_login:
-                params['force_login'] = 'true'
-        return OAuthRequest.from_consumer_and_token(self.consumer, 
-                                                    token=self.token, 
-                                                    http_url=url, 
-                                                    parameters=params)
-    
-    def _get_resource_request(self, url, parameters, http_method='GET'):
-        return OAuthRequest.from_consumer_and_token(self.consumer,
-                                                    http_url=url,
-                                                    token=self.token,
-                                                    parameters=parameters,
-                                                    http_method=http_method)
     
     ############################################################################
     ## some extra requests
@@ -2142,7 +1993,7 @@ class API(OAuthClient):
         
         version = version or self.apiVersion
         
-        if screen_name is not None:
+        if user_id is not None:
             kwargs['user_id'] = user_id
         if screen_name is not None:
             kwargs['screen_name'] = screen_name
@@ -2186,7 +2037,7 @@ class API(OAuthClient):
         
         version = version or self.apiVersion
         
-        if screen_name is not None:
+        if user_id is not None:
             kwargs['user_id'] = user_id
         if screen_name is not None:
             kwargs['screen_name'] = screen_name
@@ -2550,7 +2401,7 @@ class API(OAuthClient):
     ############################################################################
     
     @_authentication_required
-    def notification_follow(self, version=None, **kargs):
+    def notification_follow(self, user_id=None, screen_name=None, version=None, **kwargs):
         """notification_follow()
 
         Enables device notifications for updates from the specified user.
@@ -2579,11 +2430,20 @@ class API(OAuthClient):
                                defaults to 1, but you can override on a 
                                function-by-function or class basis - (version=2), etc.
         """
+        if user_id is None and screen_name is None:
+            raise RequestError('notification_follow(): Need one of the following parameter: user_id or screen_name')
+        
         version = version or self.apiVersion
-        return self.fetch_resource("http://api.twitter.com/$d/notifications/follow.json"%(version), kwargs, 'POST')
+        
+        if user_id is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
+            
+        return self.fetch_resource("http://api.twitter.com/%d/notifications/follow.json"%(version), kwargs, 'POST')
     
     @_authentication_required
-    def notification_leave(self, version=None, **kargs):
+    def notification_leave(self, user_id=None, screen_name=None, version=None, **kwargs):
         """notification_leave()
 
         Disables notifications for updates from the specified user to the
@@ -2612,340 +2472,690 @@ class API(OAuthClient):
                                defaults to 1, but you can override on a 
                                function-by-function or class basis - (version=2), etc.
         """
+        if user_id is None and screen_name is None:
+            raise RequestError('notification_leave(): Need one of the following parameter: user_id or screen_name')
+        
         version = version or self.apiVersion
-        return self.fetch_resource("http://api.twitter.com/$d/notifications/leave.json"%(version), kwargs, 'POST')
+        
+        if user_id is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
+            
+        return self.fetch_resource("http://api.twitter.com/%d/notifications/leave.json"%(version), kwargs, 'POST')
     
     ############################################################################
     ## Block methods
     ############################################################################
     
-    def block_create(self, id, version = None):
-        """createBlock(id)
+    @_authentication_required
+    def block_create(self, user_id=None, screen_name=None, version=None, **kwargs):
+        """block_create()
 
-        	Blocks the user specified in the ID parameter as the authenticating user. Destroys a friendship to the blocked user if it exists. 
-        	Returns the blocked user in the requested format when successful.
+        Blocks the user specified in the ID parameter as the authenticating
+        user. Destroys a friendship to the blocked user if it exists. Returns
+        the blocked user in the requested format when successful.
 
-        	Parameters:
-        		id - The ID or screen name of a user to block.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        Parameters:
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID. 
+                          
+            include_entities - When set to either true, t or 1, each tweet
+                               will include a node called "entities,". This
+                               node offers a variety of metadata about the
+                               tweet in a discreet structure, including:
+                               user_mentions, urls, and hashtags. While
+                               entities are opt-in on timelines at present,
+                               they will be made a default component of output
+                               in the future. See Tweet Entities for more detail
+                               on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
+        if user_id is None and screen_name is None:
+            raise RequestError('block_create(): Need one of the following parameter: user_id or screen_name')
+        
         version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/blocks/create/%s.json" % (version, `id`), ""))
-            except HTTPError, e:
-                raise mtweetsError("createBlock() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("createBlock() requires you to be authenticated.")
-
-    def destroyBlock(self, id, version = None):
-        """destroyBlock(id)
-
-        	Un-blocks the user specified in the ID parameter for the authenticating user.
-        	Returns the un-blocked user in the requested format when successful.
-
-        	Parameters:
-        		id - Required. The ID or screen_name of the user to un-block
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/blocks/destroy/%s.json" % (version, `id`), ""))
-            except HTTPError, e:
-                raise mtweetsError("destroyBlock() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("destroyBlock() requires you to be authenticated.")
-
-    def checkIfBlockExists(self, id = None, user_id = None, screen_name = None, version = None):
-        """checkIfBlockExists(id = None, user_id = None, screen_name = None)
-
-        	Returns if the authenticating user is blocking a target user. Will return the blocked user's object if a block exists, and 
-        	error with an HTTP 404 response code otherwise.
-
-        	Parameters:
-        		** Note: One of the following is required. (id, user_id, screen_name)
-        		id - Optional. The ID or screen_name of the potentially blocked user.
-        		user_id - Optional. Specfies the ID of the potentially blocked user. Helpful for disambiguating when a valid user ID is also a valid screen name.
-        		screen_name - Optional. Specfies the screen name of the potentially blocked user. Helpful for disambiguating when a valid screen name is also a user ID.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        apiURL = ""
-        if id is not None:
-            apiURL = "http://api.twitter.com/%d/blocks/exists/%s.json" % (version, `id`)
+        
         if user_id is not None:
-            apiURL = "http://api.twitter.com/%d/blocks/exists.json?user_id=%s" % (version, `user_id`)
+            kwargs['user_id'] = user_id
         if screen_name is not None:
-            apiURL = "http://api.twitter.com/%d/blocks/exists.json?screen_name=%s" % (version, screen_name)
-        try:
-            return simplejson.load(self.opener.open(apiURL))
-        except HTTPError, e:
-            raise mtweetsError("checkIfBlockExists() failed with a %s error code." % `e.code`, e.code)
+            kwargs['screen_name'] = screen_name
+            
+        return self.fetch_resource("http://api.twitter.com/%d/blocks/create.json"%(version), kwargs, 'POST')
 
-    def getBlocking(self, page = "1", version = None):
-        """getBlocking(page = "1")
+    @_authentication_required
+    def block_destroy(self, user_id=None, screen_name=None, version = None):
+        """block_destroy()
 
-        	Returns an array of user objects that the authenticating user is blocking.
+        Un-blocks the user specified in the ID parameter for the authenticating
+        user. Returns the un-blocked user in the requested format when successful.
 
-        	Parameters:
-        		page - Optional. Specifies the page number of the results beginning at 1. A single page contains 20 ids.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        Parameters:
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID. 
+                          
+            include_entities - When set to either true, t or 1, each tweet
+                               will include a node called "entities,". This
+                               node offers a variety of metadata about the
+                               tweet in a discreet structure, including:
+                               user_mentions, urls, and hashtags. While
+                               entities are opt-in on timelines at present,
+                               they will be made a default component of output
+                               in the future. See Tweet Entities for more detail
+                               on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        if user_id is None and screen_name is None:
+            raise RequestError('block_destroy(): Need one of the following parameter: user_id or screen_name')
+        
+        version = version or self.apiVersion
+        
+        if user_id is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
+            
+        return self.fetch_resource("http://api.twitter.com/%d/blocks/destroy.json"%(version), kwargs, 'POST')
+
+    @_authentication_required
+    def block_exists(self, user_id=None, screen_name=None, version=None, **kwargs):
+        """block_exists()
+
+        Returns if the authenticating user is blocking a target user. Will
+        return the blocked user's object if a block exists, and error with a
+        HTTP 404 response code otherwise.
+
+        Parameters:
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID. 
+                          
+            include_entities - When set to either true, t or 1, each tweet
+                               will include a node called "entities,". This
+                               node offers a variety of metadata about the
+                               tweet in a discreet structure, including:
+                               user_mentions, urls, and hashtags. While
+                               entities are opt-in on timelines at present,
+                               they will be made a default component of output
+                               in the future. See Tweet Entities for more detail
+                               on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        if user_id is None and screen_name is None:
+            raise RequestError('block_exists(): Need one of the following parameter: user_id or screen_name')
+        
+        version = version or self.apiVersion
+        
+        if user_id is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
+            
+        return self.fetch_resource("http://api.twitter.com/%d/blocks/exists.json"%(version), kwargs)
+    
+    @_authentication_required
+    def block_get(self, version=None, **kwargs):
+        """block_get()
+
+        Returns an array of user objects that the authenticating user is blocking.
+
+        Parameters:
+            page - Specifies the page of results to retrieve.
+            
+            include_entities - When set to either true, t or 1, each tweet
+                               will include a node called "entities,". This
+                               node offers a variety of metadata about the
+                               tweet in a discreet structure, including:
+                               user_mentions, urls, and hashtags. While
+                               entities are opt-in on timelines at present,
+                               they will be made a default component of output
+                               in the future. See Tweet Entities for more detail
+                               on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/blocks/blocking.json?page=%s" % (version, `page`)))
-            except HTTPError, e:
-                raise mtweetsError("getBlocking() failed with a %s error code." %	`e.code`, e.code)
-        else:
-            raise AuthError("getBlocking() requires you to be authenticated")
+        return self.fetch_resource("http://api.twitter.com/%d/blocks/blocking.json"%(version), kwargs)
+    
+    @_authentication_required
+    def blocked_get_ids(self, version=None):
+        """blocked_get_ids()
 
-    def getBlockedIDs(self, version = None):
-        """getBlockedIDs()
+        Returns an array of numeric user ids the authenticating user is blocking.
 
-        	Returns an array of numeric user ids the authenticating user is blocking.
-
-        	Parameters:
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+        Parameters:
+            version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
         """
         version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/blocks/blocking/ids.json" % version))
-            except HTTPError, e:
-                raise mtweetsError("getBlockedIDs() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("getBlockedIDs() requires you to be authenticated.")
+        return self.fetch_resource("http://api.twitter.com/%d/blocks/blocking/ids.json"%(version))
     
     ############################################################################
-    ## Social graph methods
+    ## Spam methods
+    ############################################################################
+    
+    @_authentication_required
+    def report_spam(self, user_id=None, screen_name=None, version=None, **kwargs):
+        """reportSpam():
+
+        The user specified in the id is blocked by the authenticated user and
+        reported as a spammer.
+
+        Parameters:
+            user_id - The ID of the user for whom to return results for. Helpful
+                      for disambiguating when a valid user ID is also a valid
+                      screen name.
+
+            screen_name - The screen name of the user for whom to return results
+                          for. Helpful for disambiguating when a valid screen
+                          name is also a user ID. 
+                          
+            include_entities - When set to either true, t or 1, each tweet
+                               will include a node called "entities,". This
+                               node offers a variety of metadata about the
+                               tweet in a discreet structure, including:
+                               user_mentions, urls, and hashtags. While
+                               entities are opt-in on timelines at present,
+                               they will be made a default component of output
+                               in the future. See Tweet Entities for more detail
+                               on entities. 
+
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        if user_id is None and screen_name is None:
+            raise RequestError('report_spam(): Need one of the following parameter: user_id or screen_name')
+        
+        version = version or self.apiVersion
+        
+        if user_id is not None:
+            kwargs['user_id'] = user_id
+        if screen_name is not None:
+            kwargs['screen_name'] = screen_name
+            
+        return self.fetch_resource("http://api.twitter.com/%d/report_spam.json"%(version), kwargs)
+    
+    ############################################################################
+    ## saved searches methods
+    ############################################################################
+    
+    @_authentication_required
+    def saved_searches_get(self, version=None):
+        """saved_searches_get()
+
+        Returns the authenticated user's saved search queries.
+
+       	Parameters:
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/saved_searches.json"%(version))
+    
+    @_authentication_required
+    def saved_searches_show(self, id, version=None):
+        """saved_searches_show(id)
+
+        Retrieve the data for a saved search owned by the authenticating user
+        specified by the given id.
+
+        Parameters:
+            id - The id of the saved search to be retrieved.
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/saved_searches/show/%s.json"%(version, id))
+    
+    def saved_searches_create(self, query, version=None):
+        """saved_searches_create(query)
+
+        Creates a saved search for the authenticated user.
+
+        Parameters:
+            query - The query of the search the user would like to save.
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        kwargs = {'query':query}
+        return self.fetch_resource("http://api.twitter.com/%d/saved_searches/create.json"%(version), kwargs, 'POST')
+    
+    @_authentication_required
+    def saved_searches_destroy(self, id, version = None):
+        """ saved_searches_destroy(id)
+
+        Destroys a saved search for the authenticated user. The search specified
+        by id must be owned by the authenticating user.
+
+        Parameters:
+            id - The id of the saved search to be deleted.
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/saved_searches/destroy/%s.json"%(version, id), http_method='POST')
+    
+    ############################################################################
+    ## Geo methods
+    ############################################################################
+    
+    @_simple_decorator
+    def geo_search(self, version=None, **kwargs):
+        """ geo_search()
+
+        Search for places that can be attached to a statuses/update. Given a
+        latitude and a longitude pair, an IP address, or a name, this request
+        will return a list of all the valid places that can be used as the
+        place_id when updating a status.
+
+        Conceptually, a query can be made from the user's location, retrieve a
+        list of places, have the user validate the location he or she is at, and
+        then send the ID of this location with a call to statuses/update.
+
+        This is the recommended method to use find places that can be attached
+        to statuses/update. Unlike geo/reverse_geocode which provides raw data
+        access, this endpoint can potentially re-order places with regards to
+        the user who is authenticated. This approach is also preferred for
+        interactive place matching with the user.
+
+        Parameters:
+            lat - The latitude to search around. This parameter will be ignored
+                  unless it is inside the range -90.0 to +90.0 (North is 
+                  positive) inclusive. It will also be ignored if there isn't a
+                  corresponding long parameter.
+                  
+            long - The longitude to search around. The valid ranges for
+                   longitude is -180.0 to +180.0 (East is positive) inclusive.
+                   This parameter will be ignored if outside that range, if it
+                   is not a number, if geo_enabled is disabled, or if there not
+                   a corresponding lat parameter.
+            
+            query - Free-form text to match against while executing a geo-based
+                    query, best suited for finding nearby locations by name.
+                    Remember to URL encode the query.
+                    
+            ip - An IP address. Used when attempting to fix geolocation based
+                 off of the user's IP address.
+                 
+            granularity - This is the minimal granularity of place types to
+                          return and must be one of: poi, neighborhood, city,
+                          admin or country. If no granularity is provided for
+                          the request neighborhood is assumed.
+                          Setting this to city, for example, will find places
+                          which have a type of city, admin or country.
+          
+            accuracy - A hint on the "region" in which to search. If a number,
+                       then this is a radius in meters, but it can also take a
+                       string that is suffixed with ft to specify feet. If this
+                       is not passed in, then it is assumed to be 0m. If coming
+                       from a device, in practice, this value is whatever
+                       accuracy the device has measuring its location (whether
+                       it be coming from a GPS, WiFi triangulation, etc.).
+          
+            max_results - A hint as to the number of results to return. This
+                          does not guarantee that the number of results returned
+                          will equal max_results, but instead informs how many
+                          "nearby" results to return. Ideally, only pass in the
+                          number of places you intend to display to the user here.
+          
+            contained_within - This is the place_id which you would like to
+                               restrict the search results to. Setting this
+                               value means only places within the given place_id
+                               will be found.
+                               Specify a place_id. For example, to scope all 
+                               results to places within "San Francisco, CA USA",
+                               you would specify a place_id of "5a110d312052166f"
+          
+            attribute:street_address - This parameter searches for places which
+                                       have this given street address. There are
+                                       other well-known, and application
+                                       specific attributes available. Custom
+                                       attributes are also permitted. Learn more
+                                       about Place Attributes.
+
+           callback - If supplied, the response will use the JSONP format with a
+                      callback of the given name.
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/geo/search.json"%(version), kwargs)
+    
+    @_simple_decorator
+    def geo_similar_places(self, lat, long, name, version=None, **kwargs):
+        """ geo_similar_places(lat, long, name)
+
+        Locates places near the given coordinates which are similar in name.
+
+        Conceptually you would use this method to get a list of known places to
+        choose from first. Then, if the desired place doesn't exist, make a
+        request to post/geo/place to create a new one.
+
+        The token contained in the response is the token needed to be able to
+        create a new place.
+
+        Parameters:
+            lat - The latitude to search around. This parameter will be ignored
+                  unless it is inside the range -90.0 to +90.0 (North is 
+                  positive) inclusive. It will also be ignored if there isn't a
+                  corresponding long parameter.
+                  
+            long - The longitude to search around. The valid ranges for
+                   longitude is -180.0 to +180.0 (East is positive) inclusive.
+                   This parameter will be ignored if outside that range, if it
+                   is not a number, if geo_enabled is disabled, or if there not
+                   a corresponding lat parameter.
+                   
+            name - The name a place is known as. 
+            
+            contained_within - This is the place_id which you would like to
+                               restrict the search results to. Setting this
+                               value means only places within the given place_id
+                               will be found.
+                               Specify a place_id. For example, to scope all 
+                               results to places within "San Francisco, CA USA",
+                               you would specify a place_id of "5a110d312052166f"
+          
+            attribute:street_address - This parameter searches for places which
+                                       have this given street address. There are
+                                       other well-known, and application
+                                       specific attributes available. Custom
+                                       attributes are also permitted. Learn more
+                                       about Place Attributes.
+
+           callback - If supplied, the response will use the JSONP format with a
+                      callback of the given name.
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        kwargs['lat'] = lat
+        kwargs['long'] = long
+        kwargs['name'] = name
+        return self.fetch_resource("http://api.twitter.com/%d/geo/similar_places.json"%(version), kwargs)
+    
+    @_simple_decorator
+    def geo_reverse_geocode(self, lat, long, version=None, **kwargs):
+        """ geo_reverse_geocode(lat, long)
+
+        Given a latitude and a longitude, searches for up to 20 places that can
+        be used as a place_id when updating a status.
+
+        This request is an informative call and will deliver generalized results
+        about geography.
+
+        Parameters:
+            lat - The latitude to search around. This parameter will be ignored
+                  unless it is inside the range -90.0 to +90.0 (North is 
+                  positive) inclusive. It will also be ignored if there isn't a
+                  corresponding long parameter.
+                  
+            long - The longitude to search around. The valid ranges for
+                   longitude is -180.0 to +180.0 (East is positive) inclusive.
+                   This parameter will be ignored if outside that range, if it
+                   is not a number, if geo_enabled is disabled, or if there not
+                   a corresponding lat parameter.
+            
+            granularity - This is the minimal granularity of place types to
+                          return and must be one of: poi, neighborhood, city,
+                          admin or country. If no granularity is provided for
+                          the request neighborhood is assumed.
+                          Setting this to city, for example, will find places
+                          which have a type of city, admin or country.
+          
+            accuracy - A hint on the "region" in which to search. If a number,
+                       then this is a radius in meters, but it can also take a
+                       string that is suffixed with ft to specify feet. If this
+                       is not passed in, then it is assumed to be 0m. If coming
+                       from a device, in practice, this value is whatever
+                       accuracy the device has measuring its location (whether
+                       it be coming from a GPS, WiFi triangulation, etc.).
+          
+            max_results - A hint as to the number of results to return. This
+                          does not guarantee that the number of results returned
+                          will equal max_results, but instead informs how many
+                          "nearby" results to return. Ideally, only pass in the
+                          number of places you intend to display to the user here.
+          
+           callback - If supplied, the response will use the JSONP format with a
+                      callback of the given name.
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/geo/reverse_geocode.json"%(version), kwargs)
+    
+    @_simple_decorator
+    def geo_id(self, place_id, version=None):
+        """ geo_id(place_id)
+
+        Returns all the information about a known place.
+
+        Parameters:
+            place_id - A place in the world. These IDs can be retrieved from
+                       geo/reverse_geocode. 
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.fetch_resource("http://api.twitter.com/%d/geo/id/%s.json"%(version, place_id))
+    
+    @_authentication_required
+    def geo_place(self, name, contained_within, token, lat, long, version=None, **kwargs):
+        """ geo_place(place_id)
+
+        Creates a new place at the given latitude and longitude.
+
+        Parameters:
+            name - The name a place is known as.
+
+            contained_within - The place_id within which the new place can be
+                               found. Try and be as close as possible with the
+                               containing place. For example, for a room in a
+                               building, set the contained_within as the
+                               building place_id.
+
+            token - The token found in the response from geo/similar_places.
+
+            lat - The latitude the place is located at. This parameter will be
+                  ignored unless it is inside the range -90.0 to +90.0 (North
+                  is positive) inclusive. It will also be ignored if there isn't
+                  a corresponding long parameter.
+
+            long - The longitude the place is located at. The valid ranges for
+                   longitude is -180.0 to +180.0 (East is positive) inclusive.
+                   This parameter will be ignored if outside that range, if it
+                   is not a number, if geo_enabled is disabled, or if there not
+                   a corresponding lat parameter. 
+                   
+            attribute:street_address - This parameter searches for places which
+                                       have this given street address. There are
+                                       other well-known, and application
+                                       specific attributes available. Custom
+                                       attributes are also permitted. Learn more
+                                       about Place Attributes.
+          
+            callback - If supplied, the response will use the JSONP format with
+                       a callback of the given name.
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        kwargs['name'] = name
+        kwargs['contained_within'] = contained_within
+        kwargs['token'] = token
+        kwargs['lat'] = lat
+        kwargs['long'] = long
+        return self.fetch_resource("http://api.twitter.com/%d/geo/place.json"%(version), kwargs, 'POST')
+    
+    ############################################################################
+    ## Legal methods
+    ############################################################################
+    
+    @_simple_decorator
+    def legal_tos(self, version=None):
+        """ legal_tos()
+
+        Returns Twitter's' Terms of Service in the requested format. These are
+        not the same as the Developer Terms of Service.
+
+        Parameters:
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.opener.open("http://api.twitter.com/%d/legal/tos.json"%(version))
+    
+    @_simple_decorator
+    def legal_privacy(self, version=None):
+        """ legal_privacy()
+
+        Returns Twitter's Privacy Policy in the requested format.
+
+        Parameters:
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.opener.open("http://api.twitter.com/%d/legal/tos.json"%(version))
+    
+    ############################################################################
+    ## Help methods
+    ############################################################################
+    
+    @_simple_decorator
+    def help_test(self, version=None):
+        """ help_test()
+
+        Returns the string "ok" in the requested format with a 200 OK HTTP status code.
+
+        Parameters:
+            
+            version (number) - API version to request. Entire mtweets class
+                               defaults to 1, but you can override on a 
+                               function-by-function or class basis - (version=2), etc.
+        """
+        version = version or self.apiVersion
+        return self.opener.open("http://api.twitter.com/%d/help/test..json"%(version))
+    
+    ############################################################################
+    ## search methods
     ############################################################################
 
-    def getRateLimitStatus(self, checkRequestingIP = True, version = None):
-        """getRateLimitStatus()
+    @_simple_decorator
+    def help_test(self, q, **kwargs):
+        """ help_test()
 
-        	Returns the remaining number of API requests available to the requesting user before the
-        	API limit is reached for the current hour. Calls to rate_limit_status do not count against
-        	the rate limit.  If authentication credentials are provided, the rate limit status for the
-        	authenticating user is returned.  Otherwise, the rate limit status for the requesting
-        	IP address is returned.
+        Returns the string "ok" in the requested format with a 200 OK HTTP status code.
 
-        	Params:
-        		checkRequestIP - Boolean, defaults to True. Set to False to check against the currently requesting IP, instead of the account level.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion	
-        try:
-            if checkRequestingIP is True:
-                return simplejson.load(urllib2.urlopen("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
-            else:
-                if self.authenticated is True:
-                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/account/rate_limit_status.json" % version))
-                else:
-                    raise mtweetsError("You need to be authenticated to check a rate limit status on an account.")
-        except HTTPError, e:
-            raise mtweetsError("It seems that there's something wrong. Twitter gave you a %s error code; are you doing something you shouldn't be?" % `e.code`, e.code)
-   
+        Parameters:            
+            q - Search query. Should be URL encoded. Queries will be limited by
+                complexity. 
+                
+            callback - Only available for JSON format. If supplied, the response
+                       will use the JSONP format with a callback of the given name.
+                       
+            lang - Restricts tweets to the given language, given by an ISO 639-1
+                   code.
+                   
+            locale - Specify the language of the query you are sending (only ja
+                     is currently effective). This is intended for
+                     language-specific clients and the default should work in
+                     the majority of cases.
 
-    def reportSpam(self, id = None, user_id = None, screen_name = None, version = None):
-        """reportSpam(self, id), user_id, screen_name):
+            rpp - The number of tweets to return per page, up to a max of 100.
 
-        	Report a user account to Twitter as a spam account. *One* of the following parameters is required, and
-        	this requires that you be authenticated with a user account.
+            page - The page number (starting at 1) to return, up to a max of
+                   roughly 1500 results (based on rpp * page).
 
-        	Parameters:
-        		id - Optional. The ID or screen_name of the user you want to report as a spammer.
-        		user_id - Optional.  The ID of the user you want to report as a spammer. Helpful for disambiguating when a valid user ID is also a valid screen name.
-        		screen_name - Optional.  The ID or screen_name of the user you want to report as a spammer. Helpful for disambiguating when a valid screen name is also a user ID.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            # This entire block of code is stupid, but I'm far too tired to think through it at the moment. Refactor it if you care.
-            if id is not None or user_id is not None or screen_name is not None:
-                try:
-                    apiExtension = ""
-                    if id is not None:
-                        apiExtension = "id=%s" % id
-                    if user_id is not None:
-                        apiExtension = "user_id=%s" % `user_id`
-                    if screen_name is not None:
-                        apiExtension = "screen_name=%s" % screen_name
-                    return simplejson.load(self.opener.open("http://api.twitter.com/%d/report_spam.json" % version, apiExtension))
-                except HTTPError, e:
-                    raise mtweetsError("reportSpam() failed with a %s error code." % `e.code`, e.code)
-            else:
-                raise mtweetsError("reportSpam requires you to specify an id, user_id, or screen_name. Try again!")
-        else:
-            raise AuthError("reportSpam() requires you to be authenticated.")
+            since_id - Returns results with an ID greater than (that is, more
+                       recent than) the specified ID. There are limits to the
+                       number of Tweets which can be accessed through the API.
+                       If the limit of Tweets has occured since the since_id,
+                       the since_id will be forced to the oldest ID available.
 
-    def searchUsers(self, q, per_page = 20, page = 1, version = None):
-        """ searchUsers(q, per_page = None, page = None):
+            until - Optional. Returns tweets generated before the given date.
+                    Date should be formatted as YYYY-MM-DD.
 
-        	Query Twitter to find a set of users who match the criteria we have. (Note: This, oddly, requires authentication - go figure)
+            geocode - Returns tweets by users located within a given radius of
+                      the given latitude/longitude. The location is preferentially
+                      taking from the Geotagging API, but will fall back to their
+                      Twitter profile. The parameter value is specified by
+                      "latitude,longitude,radius", where radius units must be
+                      specified as either "mi" (miles) or "km" (kilometers).
+                      Note that you cannot use the near operator via the API to
+                      geocode arbitrary locations; however you can use this
+                      geocode parameter to search near geocodes directly.
 
-        	Parameters:
-        		q (string) - Required. The query you wanna search against; self explanatory. ;)
-        		per_page (number) - Optional, defaults to 20. Specify the number of users Twitter should return per page (no more than 20, just fyi)
-        		page (number) - Optional, defaults to 1. The page of users you want to pull down.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
+            show_user - When true, prepends ":" to the beginning of the tweet.
+                        This is useful for readers that do not display Atom's
+                        author field. The default is false.
+                        
+            result_type - Optional. Specifies what type of search results you
+                          would prefer to receive. The current default is "mixed."
+                          Valid values include:
+
+                               mixed: Include both popular and real time results in the response.
+                               recent: return only the most recent results in the response
+                               popular: return only the most popular results in the response.
         """
         version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/users/search.json?q=%s&per_page=%d&page=%d" % (version, q, per_page, page)))
-            except HTTPError, e:
-                raise mtweetsError("searchUsers() failed with a %d error code." % e.code, e.code)
-        else:
-            raise AuthError("searchUsers(), oddly, requires you to be authenticated.")
-
-    
-
-    def searchTwitter(self, search_query, **kwargs):
-        """searchTwitter(search_query, **kwargs)
-
-        	Returns tweets that match a specified query.
-
-        	Parameters:
-        		callback - Optional. Only available for JSON format. If supplied, the response will use the JSONP format with a callback of the given name.
-        		lang - Optional. Restricts tweets to the given language, given by an ISO 639-1 code.
-        		locale - Optional. Language of the query you're sending (only ja is currently effective). Intended for language-specific clients; default should work in most cases.
-        		rpp - Optional. The number of tweets to return per page, up to a max of 100.
-        		page - Optional. The page number (starting at 1) to return, up to a max of roughly 1500 results (based on rpp * page. Note: there are pagination limits.)
-        		since_id - Optional. Returns tweets with status ids greater than the given id.
-        		geocode - Optional. Returns tweets by users located within a given radius of the given latitude/longitude, where the user's location is taken from their Twitter profile. The parameter value is specified by "latitide,longitude,radius", where radius units must be specified as either "mi" (miles) or "km" (kilometers). Note that you cannot use the near operator via the API to geocode arbitrary locations; however you can use this geocode parameter to search near geocodes directly.
-        		show_user - Optional. When true, prepends "<user>:" to the beginning of the tweet. This is useful for readers that do not display Atom's author field. The default is false. 
-
-        	Usage Notes:
-        		Queries are limited 140 URL encoded characters.
-        		Some users may be absent from search results.
-        		The since_id parameter will be removed from the next_page element as it is not supported for pagination. If since_id is removed a warning will be added to alert you.
-        		This method will return an HTTP 404 error if since_id is used and is too old to be in the search index.
-
-        	Applications must have a meaningful and unique User Agent when using this method. 
-        	An HTTP Referrer is expected but not required. Search traffic that does not include a User Agent will be rate limited to fewer API calls per hour than 
-        	applications including a User Agent string. You can set your custom UA headers by passing it as a respective argument to the setup() method.
-        """
-        searchURL = self.constructApiURL("http://search.twitter.com/search.json", kwargs) + "&" + urllib.urlencode({"q": self.unicode2utf8(search_query)})
-        try:
-            return simplejson.load(self.opener.open(searchURL))
-        except HTTPError, e:
-            raise mtweetsError("getSearchTimeline() failed with a %s error code." % `e.code`, e.code)
-
-    
-    def getSavedSearches(self, version = None):
-        """getSavedSearches()
-
-        	Returns the authenticated user's saved search queries.
-
-        	Parameters:
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/saved_searches.json" % version))
-            except HTTPError, e:
-                raise mtweetsError("getSavedSearches() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("getSavedSearches() requires you to be authenticated.")
-
-    def showSavedSearch(self, id, version = None):
-        """showSavedSearch(id)
-
-        	Retrieve the data for a saved search owned by the authenticating user specified by the given id.
-
-        	Parameters:
-        		id - Required. The id of the saved search to be retrieved.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/saved_searches/show/%s.json" % (version, `id`)))
-            except HTTPError, e:
-                raise mtweetsError("showSavedSearch() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("showSavedSearch() requires you to be authenticated.")
-
-    def createSavedSearch(self, query, version = None):
-        """createSavedSearch(query)
-
-        	Creates a saved search for the authenticated user.
-
-        	Parameters:
-        		query - Required. The query of the search the user would like to save.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/saved_searches/create.json?query=%s" % (version, query), ""))
-            except HTTPError, e:
-                raise mtweetsError("createSavedSearch() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("createSavedSearch() requires you to be authenticated.")
-
-    def destroySavedSearch(self, id, version = None):
-        """ destroySavedSearch(id)
-
-        	Destroys a saved search for the authenticated user.
-        	The search specified by id must be owned by the authenticating user.
-
-        	Parameters:
-        		id - Required. The id of the saved search to be deleted.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        if self.authenticated is True:
-            try:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/saved_searches/destroy/%s.json" % (version, `id`), ""))
-            except HTTPError, e:
-                raise mtweetsError("destroySavedSearch() failed with a %s error code." % `e.code`, e.code)
-        else:
-            raise AuthError("destroySavedSearch() requires you to be authenticated.")
-
-    def availableTrends(self, latitude = None, longitude = None, version = None):
-        """ availableTrends(latitude, longitude, version):
-
-        	Gets all available trends, optionally filtering by geolocation based stuff.
-
-        	Note: If you choose to pass a latitude/longitude, keep in mind that you have to pass both - one won't work by itself. ;P
-
-        	Parameters:
-        		latitude (string) - Optional. A latitude to sort by.
-        		longitude (string) - Optional. A longitude to sort by.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        try:
-            if latitude is not None and longitude is not None:
-                return simplejson.load(self.opener.open("http://api.twitter.com/%d/trends/available.json?latitude=%s&longitude=%s" % (version, latitude, longitude)))
-            return simplejson.load(self.opener.open("http://api.twitter.com/%d/trends/available.json" % version))
-        except HTTPError, e:
-            raise mtweetsError("availableTrends() failed with a %d error code." % e.code, e.code)
-
-    def trendsByLocation(self, woeid, version = None):
-        """ trendsByLocation(woeid, version):
-
-        	Gets all available trends, filtering by geolocation (woeid - see http://developer.yahoo.com/geo/geoplanet/guide/concepts.html).
-
-        	Note: If you choose to pass a latitude/longitude, keep in mind that you have to pass both - one won't work by itself. ;P
-
-        	Parameters:
-        		woeid (string) - Required. WoeID of the area you're searching in.
-        		version (number) - Optional. API version to request. Entire mtweets class defaults to 1, but you can override on a function-by-function or class basis - (version=2), etc.
-        """
-        version = version or self.apiVersion
-        try:
-            return simplejson.load(self.opener.open("http://api.twitter.com/%d/trends/%s.json" % (version, woeid)))
-        except HTTPError, e:
-            raise mtweetsError("trendsByLocation() failed with a %d error code." % e.code, e.code)
+        kwargs['q'] = q
+        return self.opener.open("http://search.twitter.com/search.json?%s"%(urllib.urlencode(kwargs)))
 
     # The following methods are apart from the other Account methods, because they rely on a whole multipart-data posting function set.
     
-
+    ############################################################################
+    ## Other methods
+    ############################################################################
+    
     def _encode_multipart_formdata(self, fields, files):
         BOUNDARY = mimetools.choose_boundary()
         CRLF = '\r\n'

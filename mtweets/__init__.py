@@ -12,3 +12,4 @@ like as Tweet entities, and how use each parameter
 """
 
 from api import API
+from streaming import Stream

@@ -4,6 +4,7 @@ import pickle
 sys.path.append('%s/oauth/'%(os.getcwd()))
 
 from mtweets import API
+from mtweets import Stream
 from oauth import OAuthDataStoreMixin
 
 class DataStore(OAuthDataStoreMixin):
@@ -45,22 +46,22 @@ def main():
     #token.set_verifier(pin)
     #api.fetch_access_token(token)
     
-    api = API((key, secret), 'test', True, True)
+    api = Stream((key, secret), 'test', True, True)
     api.oauth_datastore = DataStore()
     #print api.verify_credentials()
-    #print api.get_public_timeline()
-    #print api.get_home_timeline(count=2)
-    #print api.get_friends_timeline(count=2)
-    #print api.get_user_timeline(count=2)
-    #print api.get_mentions(count=2)    
-    #print api.get_retweeted_by_me(count=2)
-    #print api.get_retweeted_of_me(count=2)
-    #print api.get_retweeted_to_me(count=2)
+    #print api.public_timeline_get()
+    #print api.home_timeline_get(count=2)
+    #print api.friends_timeline_get(count=2)
+    #print api.user_timeline_get(count=2)
+    #print api.mentions_get(count=2)    
+    #print api.retweeted_by_me_get(count=2)
+    #print api.retweeted_of_me_get(count=2)
+    #print api.retweeted_to_me_get(count=2)
     #print api.status_show(21017907772)
     #print api.status_update("testing status update with mtweets")    
     #print api.status_destroy(21037924303)    
-    print api.status_retweet(21037278048)    
-    
+    #print api.status_retweet(21037278048)    
+    print dir(api.sample())
     
 main()
     
