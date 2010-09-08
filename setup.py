@@ -12,6 +12,7 @@ METADATA = dict(
     py_modules = ['setup',
                   'mtweets/__init__',
                   'mtweets/api',
+                  'mtweets/utils',
                   'mtweets/streaming'],
     author = 'Luis Carlos Cruz',
     author_email = 'carlitos.kyo@gmail.com',
