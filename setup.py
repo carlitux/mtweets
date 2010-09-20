@@ -9,8 +9,7 @@ __version__ = '0.1'
 METADATA = dict(
     name = "mtweets",
     version = __version__,
-    py_modules = ['setup',
-                  'mtweets/__init__',
+    py_modules = ['mtweets/__init__',
                   'mtweets/api',
                   'mtweets/utils',
                   'mtweets/streaming'],
