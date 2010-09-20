@@ -3,7 +3,7 @@
 import sys, os
 
 __author__ = 'Luis Carlos Cruz <carlitos.kyo@gmail.com>'
-__version__ = '0.1'
+__version__ = '0.2'
 
 # Distutils version
 METADATA = dict(
