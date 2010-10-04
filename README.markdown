@@ -1,5 +1,8 @@
 mtweets (Manager of tweets) - Easy Twitter utilities in Python
 =========================================================================================
+
+*Please send feedback and comments to carlitos.kyo@gmail.com*
+
 This overwrite the original code hosted here http://github.com/ryanmcgrath/twython.
 
 Streaming API support is in the works, but every other part of the Twitter API should be covered.
