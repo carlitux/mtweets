@@ -19,7 +19,7 @@ METADATA = dict(
     long_description = open("README.markdown").read(),
     license = 'MIT License',
     url = 'http://github.com/carlitux/mtweets',
-    keywords = 'twitter search api tweet twython',
+    keywords = 'twitter search api tweet twython mtweets',
 )
 
 # Setuptools version
